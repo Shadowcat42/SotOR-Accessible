@@ -1,0 +1,127 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      CARGO_TERM_COLOR: always
+      ASSET_RELEASE_TAG: build-assets-v1
+      ASSET_NAME: sotor-assets.zip
+      ASSET_SHA256: 3a1c42cfe994977246bd340471e89304af06efb2ef9d45675e8e35dfc7023e37
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install pinned Rust toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.74.0 --profile minimal --component rustfmt
+          rustup default 1.74.0
+          rustc --version
+          cargo --version
+
+      - name: Download private build assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $assetDirectory = Join-Path $env:RUNNER_TEMP "sotor-build-assets"
+          New-Item -ItemType Directory -Path $assetDirectory -Force | Out-Null
+          gh release download $env:ASSET_RELEASE_TAG `
+            --pattern $env:ASSET_NAME `
+            --dir $assetDirectory `
+            --clobber
+
+          $assetPath = Join-Path $assetDirectory $env:ASSET_NAME
+          $actualHash = (Get-FileHash -Algorithm SHA256 $assetPath).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:ASSET_SHA256) {
+            throw "Build asset checksum mismatch. Expected $env:ASSET_SHA256, got $actualHash."
+          }
+
+          Add-Content -Path $env:GITHUB_ENV -Value "SOTOR_ASSETS_ZIP=$assetPath"
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Run tests
+        run: cargo test --workspace --locked
+
+      - name: Build release executable
+        run: cargo build --release --locked
+
+      - name: Package Windows release
+        id: package
+        shell: pwsh
+        run: |
+          $versionMatch = Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1
+          if (-not $versionMatch) {
+            throw "Could not read the package version from Cargo.toml."
+          }
+
+          $version = $versionMatch.Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Release tag $env:GITHUB_REF_NAME does not match Cargo version $version (expected v$version)."
+          }
+
+          $stageName = "SotOR-Accessible-$version-Windows"
+          $stagePath = Join-Path $env:RUNNER_TEMP $stageName
+          New-Item -ItemType Directory -Path $stagePath -Force | Out-Null
+
+          Copy-Item target\release\sotor.exe (Join-Path $stagePath "SotOR-Accessible.exe")
+          Copy-Item README.md, ACCESSIBILITY.md, RELEASE-NOTES.md, LICENSE $stagePath
+
+          $exePath = Join-Path $stagePath "SotOR-Accessible.exe"
+          $exeHash = (Get-FileHash -Algorithm SHA256 $exePath).Hash.ToLowerInvariant()
+          "$exeHash *SotOR-Accessible.exe" | Set-Content `
+            -Path (Join-Path $stagePath "SHA256SUMS.txt") `
+            -Encoding ascii
+
+          $archivePath = Join-Path $env:RUNNER_TEMP "$stageName.zip"
+          Compress-Archive -Path $stagePath -DestinationPath $archivePath -CompressionLevel Optimal
+          $archiveHash = (Get-FileHash -Algorithm SHA256 $archivePath).Hash.ToLowerInvariant()
+          $checksumPath = "$archivePath.sha256"
+          "$archiveHash *$stageName.zip" | Set-Content -Path $checksumPath -Encoding ascii
+
+          "version=$version" | Add-Content -Path $env:GITHUB_OUTPUT
+          "archive=$archivePath" | Add-Content -Path $env:GITHUB_OUTPUT
+          "checksum=$checksumPath" | Add-Content -Path $env:GITHUB_OUTPUT
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SotOR-Accessible-${{ steps.package.outputs.version }}-Windows
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            "${{ steps.package.outputs.archive }}" `
+            "${{ steps.package.outputs.checksum }}" `
+            --verify-tag `
+            --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
+            --notes-file RELEASE-NOTES.md

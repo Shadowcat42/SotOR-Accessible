@@ -54,6 +54,16 @@
 
 The project requires Rust 1.74 or newer. A native build also requires either
 `SOTOR_ASSETS_ZIP` or a `STEAM_APPS` directory containing both supported games.
+Local Windows compiler installation is optional: the canonical release path is
+the `.github/workflows/windows-release.yml` GitHub Actions workflow on a hosted
+Windows runner.
+
+The workflow downloads `sotor-assets.zip` from the repository's private
+`build-assets-v1` release and verifies SHA-256
+`3a1c42cfe994977246bd340471e89304af06efb2ef9d45675e8e35dfc7023e37` before
+building. Do not commit the extracted asset bundle or replace it silently. If
+game data must intentionally change, create a new private build-assets release
+tag and update both the tag and checksum in the workflow in a dedicated commit.
 
 Run the automated baseline with:
 
@@ -78,5 +88,10 @@ For Windows releases, also verify:
 - Keep `main` buildable and use small, focused commits.
 - Separate mechanical/versioning changes from behavior changes.
 - Do not rewrite the imported A5 baseline commit.
+- Treat successful GitHub Actions runs as the automated build record. Every
+  push to `main` produces a temporary Windows artifact; a matching version tag
+  (for example, Cargo `1.0.0` with Git tag `v1.0.0`) publishes a release.
+- Keep the repository private unless the owner explicitly decides otherwise;
+  its private build-assets release contains data derived from installed games.
 - Before committing, inspect `git diff`, run `git diff --check`, and perform the
   relevant automated and manual validation above.
