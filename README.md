@@ -38,14 +38,24 @@ I would like to add support for the console versions, but I don't own any of the
 
 # Building
 
-To build SotOR yourself you need to have the [rust toolchain](https://www.rust-lang.org/learn/get-started), platform-specific dependencies for [egui](https://github.com/emilk/egui/tree/3b19303e02bd2d386cf8b85b248388a25bfe9e26/crates/egui_glow) and [rfd](https://docs.rs/rfd/0.13.0/rfd/index.html#gtk-backend) and both games installed.
+Official Windows packages are built by the `Windows build` GitHub Actions
+workflow. Every push to `main` produces a downloadable workflow artifact, and
+pushing a version tag such as `v1.0.0` also creates a GitHub release. The
+workflow uses the private, checksum-verified `sotor-assets.zip` attached to the
+`build-assets-v1` repository release, so no game installation or local compiler
+is required.
 
-Set environment variable `STEAM_APPS` to your steamapps directory or use a `.env` file. If you are not using steam it should still work if the provided directory has the correct structure. See `build.rs` for details.
+For a local build, install the [Rust toolchain](https://www.rust-lang.org/learn/get-started)
+and the platform-specific dependencies for [egui](https://github.com/emilk/egui/tree/3b19303e02bd2d386cf8b85b248388a25bfe9e26/crates/egui_glow)
+and [rfd](https://docs.rs/rfd/0.13.0/rfd/index.html#gtk-backend). Then either set
+`SOTOR_ASSETS_ZIP` to the reusable asset bundle or install both games and set
+`STEAM_APPS` to the Steam `steamapps` directory. A `.env` file may be used for
+either setting. See `build.rs` for details.
 
 Example:
 
 ```bash
-echo STEAM_APPS=/mnt/storage/SteamLibrary/steamapps > .env
+echo SOTOR_ASSETS_ZIP=/path/to/sotor-assets.zip > .env
 cargo run #run a debug build
 cargo build --release #build a release version
 ```

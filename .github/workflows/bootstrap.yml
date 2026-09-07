@@ -1,0 +1,22 @@
+name: Bootstrap Git history
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-history:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out bootstrap commit
+        uses: actions/checkout@v4
+      - name: Verify and import canonical history
+        run: |
+          git bundle verify sotor-source.bundle
+          git fetch ./sotor-source.bundle \
+            'refs/heads/main:refs/remotes/bundle/main' \
+            'refs/tags/*:refs/tags/*'
+          git push --force origin refs/remotes/bundle/main:refs/heads/main
+          git push origin refs/tags/imported-a5
