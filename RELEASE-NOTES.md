@@ -1,4 +1,4 @@
-# SotOR Accessible Edition 1.1.8-a5
+# SotOR Accessible Edition 1.0
 
 This build makes the keyboard-first controls consistent across the editor.
 
