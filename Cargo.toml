@@ -1,0 +1,94 @@
+[package]
+name = "sotor"
+version = "1.1.8-accessible.5"
+edition = "2021"
+rust-version = "1.74"
+
+[workspace]
+members = ["macros", "core"]
+
+[workspace.dependencies]
+macros = { path = "./macros" }
+core = { path = "./core" }
+ahash = "0.8.7"
+serde = { version = "1.0.193", features = ["derive"] }
+bincode = "1.3.3"
+fastrand = "2.0.1"
+zip = { version = "0.6.6", default-features = false }
+log = "0.4"
+
+[dependencies]
+macros = { workspace = true }
+core = { workspace = true }
+ahash = { workspace = true }
+serde = { workspace = true }
+bincode = { workspace = true }
+fastrand = { workspace = true }
+log = { workspace = true }
+image = { version = "0.24", default-features = false, features = ["tga"] }
+egui-toast = "0.11.0"
+egui = "0.25"
+eframe = { version = "0.25", default-features = false, features = [
+    "accesskit",
+    "persistence",
+    "glow",
+] }
+emath = "0.25"
+
+[patch.crates-io]
+# egui 0.25 already sends controls through AccessKit, but its public widget
+# vocabulary has no tab role. This local patch adds only that missing semantic
+# role; save parsing and writing remain entirely in SotOR's original crates.
+egui = { path = "vendor/egui" }
+
+# native:
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+simplelog = "0.12.1"
+zip = { workspace = true, features = ["deflate"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+rfd = { version = "0.12.1", default-features = false }
+
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "windows")))'.dependencies]
+rfd = { version = "0.12.1", default-features = false, features = ["xdg-portal"] }
+
+# web:
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+rfd = { version = "0.12.1" }
+wasm-bindgen = "0.2.90"
+wasm-bindgen-futures = "0.4"
+fastrand = { workspace = true, features = ["js"] }
+zip = { workspace = true, features = ["deflate"] }
+
+[build-dependencies]
+core = { workspace = true }
+ahash = { workspace = true }
+bincode = { workspace = true }
+zip = { workspace = true, features = ["deflate"] }
+dotenv = "0.15"
+
+[profile.release]
+panic = "abort"
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+# Optimize all dependencies even in debug builds:
+[profile.dev.package."*"]
+opt-level = 3
+
+[lints]
+workspace = true
+
+[workspace.lints.clippy]
+pedantic = { priority = -1, level = "warn" }
+ignored_unit_patterns = "allow"
+missing_panics_doc = "allow"
+missing_errors_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+cast_sign_loss = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_lossless = "allow"

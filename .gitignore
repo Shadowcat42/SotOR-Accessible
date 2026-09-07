@@ -1,0 +1,5 @@
+.vscode
+/target
+/macros/target
+*.txt
+.env

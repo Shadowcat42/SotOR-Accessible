@@ -1,0 +1,19 @@
+[package]
+name = "core"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+macros = { workspace = true }
+ahash = { workspace = true }
+serde = { workspace = true }
+fastrand = { workspace = true }
+bytemuck = "1.14.0"
+time = { version = "0.3.31", features = ["macros"] }
+log = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+time = { version = "0.3.31", features = ["wasm-bindgen"] }
+
+[lints]
+workspace = true
