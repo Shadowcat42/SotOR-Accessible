@@ -90,6 +90,14 @@ For Windows releases, also verify:
 ## Git workflow
 
 - Keep `main` buildable and use small, focused commits.
+- Prefer creating a complete batch of local commits and pushing them together,
+  so GitHub Actions validates only the final commit in the push. If commits must
+  be pushed one at a time, include `[skip actions]` in every intermediate commit
+  message and omit it from the final commit so the final state is validated.
+- Documentation or workflow-maintenance commits that do not change the program
+  may use `[skip actions]`; validate the workflow syntax locally and let the next
+  source change exercise the hosted build.
+
 - Separate mechanical/versioning changes from behavior changes.
 - Do not rewrite the imported A5 baseline commit.
 - Treat successful GitHub Actions runs as the automated build record. Every
