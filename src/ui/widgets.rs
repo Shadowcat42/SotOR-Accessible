@@ -296,9 +296,7 @@ impl UiExt for Ui {
         _logarithmic: bool,
         label: &str,
     ) -> Response {
-        let minimum = range.start().to_f64();
-        let maximum = range.end().to_f64();
-        let mut response = self.add(DragValue::new(value).clamp_range(range));
+        let response = self.add(DragValue::new(value).speed(1.).clamp_range(range));
         self.memory_mut(|memory| {
             memory.set_focus_lock_filter(
                 response.id,
@@ -308,23 +306,6 @@ impl UiExt for Ui {
                 },
             );
         });
-        if response.has_focus() {
-            let direction = self.input_mut(|input| {
-                if input.consume_key(Modifiers::NONE, Key::ArrowUp) {
-                    1.
-                } else if input.consume_key(Modifiers::NONE, Key::ArrowDown) {
-                    -1.
-                } else {
-                    0.
-                }
-            });
-            if direction != 0. {
-                let next = (value.to_f64() + direction).max(minimum).min(maximum);
-                *value = T::from_f64(next);
-                response.mark_changed();
-                self.ctx().request_repaint();
-            }
-        }
         response.widget_info(|| WidgetInfo {
             label: Some(label.to_owned()),
             ..WidgetInfo::drag_value(value.to_f64())
