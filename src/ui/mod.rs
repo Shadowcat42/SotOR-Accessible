@@ -302,10 +302,12 @@ impl SotorApp {
             let announcement = format!("Loaded save: {label}");
             self.add_toast(announcement.clone(), None, true);
             ctx.output_mut(|output| {
-                output.events.push(OutputEvent::ValueChanged(WidgetInfo::labeled(
-                    WidgetType::Other,
-                    announcement,
-                )));
+                output
+                    .events
+                    .push(OutputEvent::ValueChanged(WidgetInfo::labeled(
+                        WidgetType::Other,
+                        announcement,
+                    )));
             });
         }
     }

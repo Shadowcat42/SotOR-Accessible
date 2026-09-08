@@ -296,7 +296,35 @@ impl UiExt for Ui {
         _logarithmic: bool,
         label: &str,
     ) -> Response {
-        let response = self.add(DragValue::new(value).clamp_range(range));
+        let minimum = range.start().to_f64();
+        let maximum = range.end().to_f64();
+        let mut response = self.add(DragValue::new(value).clamp_range(range));
+        if response.has_focus() {
+            self.memory_mut(|memory| {
+                memory.set_focus_lock_filter(
+                    response.id,
+                    EventFilter {
+                        vertical_arrows: true,
+                        ..Default::default()
+                    },
+                );
+            });
+            let direction = self.input_mut(|input| {
+                if input.consume_key(Modifiers::NONE, Key::ArrowUp) {
+                    1.
+                } else if input.consume_key(Modifiers::NONE, Key::ArrowDown) {
+                    -1.
+                } else {
+                    0.
+                }
+            });
+            if direction != 0. {
+                let next = (value.to_f64() + direction).max(minimum).min(maximum);
+                *value = T::from_f64(next);
+                response.mark_changed();
+                self.ctx().request_repaint();
+            }
+        }
         response.widget_info(|| WidgetInfo {
             label: Some(label.to_owned()),
             ..WidgetInfo::drag_value(value.to_f64())
@@ -824,5 +852,40 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    #[test]
+    fn spin_control_arrows_change_value_and_keep_focus() {
+        let ctx = egui::Context::default();
+        let mut value = 42i32;
+        let mut control_id = None;
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                control_id = Some(ui.s_spin(&mut value, 0..=100, false, "Experience").id);
+            });
+        });
+        let control_id = control_id.unwrap();
+        ctx.memory_mut(|memory| memory.request_focus(control_id));
+
+        let mut input = egui::RawInput::default();
+        input.events.push(key_event(Key::ArrowUp));
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.s_spin(&mut value, 0..=100, false, "Experience");
+                let _ = ui.button("Following control");
+            });
+        });
+        assert_eq!(value, 43);
+        assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+
+        let mut input = egui::RawInput::default();
+        input.events.push(key_event(Key::ArrowDown));
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.s_spin(&mut value, 0..=100, false, "Experience");
+            });
+        });
+        assert_eq!(value, 42);
+        assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
     }
 }
