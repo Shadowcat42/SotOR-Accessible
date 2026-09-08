@@ -2,13 +2,18 @@ use crate::{
     save::Save,
     ui::{
         styles::set_button_styles,
-        widgets::{keyboard_tab_list, Icon, UiExt as _},
+        widgets::{keyboard_tab_list, UiExt as _},
         UiRef,
     },
     util::{ContextExt, Message},
 };
 use core::GameDataMapped;
-use egui::{Key, Layout, Modifiers};
+#[cfg(target_arch = "wasm32")]
+use crate::ui::widgets::Icon;
+#[cfg(target_arch = "wasm32")]
+use egui::Layout;
+use egui::{Key, Modifiers};
+#[cfg(target_arch = "wasm32")]
 use emath::Align;
 use macros::{EnumList, EnumToString};
 use serde::{Deserialize, Serialize};
@@ -133,6 +138,7 @@ impl<'a> Editor<'a> {
                 tab_control.request_focus();
             }
 
+            #[cfg(target_arch = "wasm32")]
             ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
                 let btn = ui.s_icon_button(Icon::Leave, "Close save (Ctrl+W)");
                 if btn.clicked() {
