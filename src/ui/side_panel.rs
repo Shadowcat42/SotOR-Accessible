@@ -117,8 +117,7 @@ impl<'a> SidePanel<'a> {
                     .and_then(|path| saves.iter().position(|(_, candidate)| candidate == path))
             })
             .unwrap_or(0);
-        let list_response =
-            keyboard_list(ui, "sp_save_list", "Saves", &options, &mut selected);
+        let list_response = keyboard_list(ui, "sp_save_list", "Saves", &options, &mut selected);
         ui.ctx().set_data_raw("sp_save_cursor", selected);
 
         let Some((_, path)) = saves.get(selected) else {
