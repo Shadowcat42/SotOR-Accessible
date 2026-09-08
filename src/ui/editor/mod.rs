@@ -1,3 +1,5 @@
+#[cfg(target_arch = "wasm32")]
+use crate::ui::widgets::Icon;
 use crate::{
     save::Save,
     ui::{
@@ -8,8 +10,6 @@ use crate::{
     util::{ContextExt, Message},
 };
 use core::GameDataMapped;
-#[cfg(target_arch = "wasm32")]
-use crate::ui::widgets::Icon;
 #[cfg(target_arch = "wasm32")]
 use egui::Layout;
 use egui::{Key, Modifiers};
