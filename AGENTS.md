@@ -4,6 +4,10 @@
 
 - This repository begins from the exported SotOR Accessible Edition
   `1.1.8-a5` source.
+- The original upstream SotOR reference is
+  `https://github.com/StarfishXeno/sotor` at revision
+  `e8dd39e18ae872bf24dadb28526224db7a6921b7`. Use it to confirm original
+  behavior, but do not edit or copy over accessibility work wholesale.
 - Commit `c60d8bf` is the byte-for-byte imported A5 baseline.
 - The maintained edition is named **SotOR Accessible Edition 1.0**. Cargo uses
   the SemVer-compatible package version `1.0.0`.
