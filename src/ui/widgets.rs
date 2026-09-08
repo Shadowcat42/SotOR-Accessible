@@ -299,16 +299,16 @@ impl UiExt for Ui {
         let minimum = range.start().to_f64();
         let maximum = range.end().to_f64();
         let mut response = self.add(DragValue::new(value).clamp_range(range));
+        self.memory_mut(|memory| {
+            memory.set_focus_lock_filter(
+                response.id,
+                EventFilter {
+                    vertical_arrows: true,
+                    ..Default::default()
+                },
+            );
+        });
         if response.has_focus() {
-            self.memory_mut(|memory| {
-                memory.set_focus_lock_filter(
-                    response.id,
-                    EventFilter {
-                        vertical_arrows: true,
-                        ..Default::default()
-                    },
-                );
-            });
             let direction = self.input_mut(|input| {
                 if input.consume_key(Modifiers::NONE, Key::ArrowUp) {
                     1.
