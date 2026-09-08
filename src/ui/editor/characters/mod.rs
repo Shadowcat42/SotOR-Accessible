@@ -8,7 +8,7 @@ use crate::{
     util::{get_data_name, ContextExt},
 };
 use core::{Data, DataDescr, GameDataMapped, ItemSlot, UsableBy, WeaponType};
-use egui::{Button, DragValue, Id, WidgetInfo};
+use egui::{Button, Id};
 use std::{collections::HashSet, mem};
 
 const SELECTED_ID: &str = "ec_selected";
@@ -419,7 +419,7 @@ impl<'a> Editor<'a> {
     }
 
     fn drag_value(&mut self, ui: UiRef, skill: bool, idx: usize) {
-        set_drag_value_styles(ui);
+        set_spin_styles(ui);
         let (value, label) = if skill {
             (
                 &mut self.save.characters[self.selected].skills[idx],
@@ -431,11 +431,7 @@ impl<'a> Editor<'a> {
                 ATTRIBUTES[idx],
             )
         };
-        let response = ui.add(DragValue::new(value));
-        response.widget_info(|| WidgetInfo {
-            label: Some(label.to_owned()),
-            ..WidgetInfo::drag_value((*value).into())
-        });
+        ui.s_spin(value, u8::MIN..=u8::MAX, false, label);
     }
 
     fn gender_editor(&mut self, ui: UiRef) {
@@ -630,11 +626,21 @@ impl<'a> Editor<'a> {
                     .get(id)
                     .map(|feat| accessible_name(feat.get_name(), feat.get_description()))
                     .unwrap_or_else(|| format!("Unknown feat {id}"));
-                (source_idx, name)
+                (source_idx, *id, name)
             })
             .collect();
-        current.sort_unstable_by(|a, b| a.1.cmp(&b.1));
-        let current_options: Vec<_> = current.iter().map(|(_, name)| name.clone()).collect();
+        current.sort_unstable_by_key(|(source_idx, id, _)| {
+            (
+                self.data
+                    .inner
+                    .feats
+                    .iter()
+                    .position(|feat| feat.id == *id)
+                    .unwrap_or(usize::MAX),
+                *source_idx,
+            )
+        });
+        let current_options: Vec<_> = current.iter().map(|(_, _, name)| name.clone()).collect();
         let current_key = Id::new("ec_current_feat_cursor").with(self.selected);
         let mut current_cursor = ui.ctx().get_data(current_key).unwrap_or(0);
         keyboard_list(
