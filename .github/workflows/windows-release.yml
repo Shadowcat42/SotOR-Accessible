@@ -131,9 +131,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create $env:GITHUB_REF_NAME `
-            "${{ steps.package.outputs.archive }}" `
-            "${{ steps.package.outputs.checksum }}" `
-            --verify-tag `
-            --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
-            --notes-file RELEASE-NOTES.md
+          if (gh release view $env:GITHUB_REF_NAME *> $null) {
+            gh release upload $env:GITHUB_REF_NAME `
+              "${{ steps.package.outputs.archive }}" `
+              "${{ steps.package.outputs.checksum }}" `
+              --clobber
+            gh release edit $env:GITHUB_REF_NAME `
+              --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
+              --notes-file RELEASE-NOTES.md
+          } else {
+            gh release create $env:GITHUB_REF_NAME `
+              "${{ steps.package.outputs.archive }}" `
+              "${{ steps.package.outputs.checksum }}" `
+              --verify-tag `
+              --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
+              --notes-file RELEASE-NOTES.md
+          }
