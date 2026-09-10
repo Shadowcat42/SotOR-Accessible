@@ -98,11 +98,7 @@ fn kotor_two(ui: UiRef, item: &mut Item, id: Id) {
         "Selected upgrade slot row; minus 1 means empty",
     );
     if ui
-        .s_button(
-            "Clear selected upgrade slot",
-            false,
-            slots[selected] < 0,
-        )
+        .s_button("Clear selected upgrade slot", false, slots[selected] < 0)
         .clicked()
     {
         slots[selected] = -1;
