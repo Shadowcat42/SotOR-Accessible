@@ -118,9 +118,7 @@ pub fn keyboard_list(
                     .trim_start()
                     .chars()
                     .next()
-                    .is_some_and(|character| {
-                        character.to_lowercase().collect::<String>() == sought
-                    })
+                    .is_some_and(|character| character.to_lowercase().collect::<String>() == sought)
             }) {
                 *selected = (start + offset) % options.len();
             }
