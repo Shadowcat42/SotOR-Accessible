@@ -92,6 +92,39 @@ pub fn keyboard_list(
             input.consume_key(Modifiers::NONE, Key::ArrowRight);
         });
 
+        let first_letter = ui.input_mut(|input| {
+            let mut first_letter = None;
+            input.events.retain(|event| {
+                let egui::Event::Text(text) = event else {
+                    return true;
+                };
+                let mut characters = text.chars();
+                let Some(character) = characters.next() else {
+                    return true;
+                };
+                if characters.next().is_some() || !character.is_alphanumeric() {
+                    return true;
+                }
+                first_letter = Some(character);
+                false
+            });
+            first_letter
+        });
+        if let Some(first_letter) = first_letter {
+            let sought: String = first_letter.to_lowercase().collect();
+            let start = (*selected + 1) % options.len();
+            if let Some(offset) = (0..options.len()).find(|offset| {
+                options[(start + offset) % options.len()]
+                    .trim_start()
+                    .chars()
+                    .next()
+                    .is_some_and(|character| {
+                        character.to_lowercase().collect::<String>() == sought
+                    })
+            }) {
+                *selected = (start + offset) % options.len();
+            }
+        }
     }
 
     let selected_name = options[*selected].clone();
@@ -708,6 +741,41 @@ mod tests {
                 });
             });
             assert_eq!(selected, 1);
+            assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+        }
+    }
+
+    #[test]
+    fn keyboard_list_first_letter_navigation_cycles_matches() {
+        let ctx = egui::Context::default();
+        let control_id = Id::new("test_list").with("keyboard_list_control");
+        ctx.memory_mut(|memory| memory.request_focus(control_id));
+        let mut selected = 0;
+        let options = [
+            "Alpha".to_owned(),
+            "Beta".to_owned(),
+            "Bravo".to_owned(),
+            "Charlie".to_owned(),
+        ];
+
+        for _ in 0..2 {
+            let _ = ctx.run(Default::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    keyboard_list(ui, "test_list", "Test list", &options, &mut selected);
+                });
+            });
+        }
+
+        for expected in [1, 2, 1] {
+            let mut input = egui::RawInput::default();
+            input.events.push(egui::Event::Text("b".to_owned()));
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    keyboard_list(ui, "test_list", "Test list", &options, &mut selected);
+                    let _ = ui.button("Following control");
+                });
+            });
+            assert_eq!(selected, expected);
             assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
         }
     }
