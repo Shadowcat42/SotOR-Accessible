@@ -597,12 +597,7 @@ impl<'a> Editor<'a> {
                 .with(self.selected)
                 .with(slot_idx)
                 .with(&item.tag);
-            item_upgrades::show(
-                ui,
-                item,
-                game,
-                upgrade_id,
-            );
+            item_upgrades::show(ui, item, game, upgrade_id);
         }
     }
 
