@@ -10,17 +10,23 @@ use crate::{
 use core::{Data as _, DataDescr as _, GameDataMapped};
 use egui::{Button, Grid, Id, Label};
 
+use super::item_upgrades;
+use crate::util::Game;
+
 pub struct Editor<'a> {
     items: &'a mut Vec<Item>,
     data: &'a GameDataMapped,
+    game: Game,
     selected: usize,
 }
 
 impl<'a> Editor<'a> {
     pub fn new(save: &'a mut Save, data: &'a GameDataMapped) -> Self {
+        let game = save.game;
         Self {
             items: &mut save.inventory,
             data,
+            game,
             selected: 0,
         }
     }
@@ -113,6 +119,9 @@ impl<'a> Editor<'a> {
                     ui.end_row();
                 }
             });
+
+        let upgrade_id = Id::new("inventory_item_upgrades").with(&item.tag);
+        item_upgrades::show(ui, item, self.game, upgrade_id);
     }
 
     fn addition(&mut self, ui: UiRef) {

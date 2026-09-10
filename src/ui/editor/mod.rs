@@ -23,6 +23,7 @@ mod characters;
 mod general;
 mod globals;
 mod inventory;
+mod item_upgrades;
 mod quests;
 
 pub fn editor_placeholder(ui: UiRef) {
