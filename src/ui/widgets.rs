@@ -91,6 +91,7 @@ pub fn keyboard_list(
             input.consume_key(Modifiers::NONE, Key::ArrowLeft);
             input.consume_key(Modifiers::NONE, Key::ArrowRight);
         });
+
     }
 
     let selected_name = options[*selected].clone();
@@ -301,6 +302,7 @@ impl UiExt for Ui {
             memory.set_focus_lock_filter(
                 response.id,
                 EventFilter {
+                    horizontal_arrows: true,
                     vertical_arrows: true,
                     ..Default::default()
                 },
@@ -848,6 +850,15 @@ mod tests {
         let control_id = control_id.unwrap();
         ctx.memory_mut(|memory| memory.request_focus(control_id));
 
+        // Let egui install the directional focus lock before sending an
+        // arrow key, matching a focused control in the running application.
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.s_spin(&mut value, 0..=100, false, "Experience");
+                let _ = ui.button("Following control");
+            });
+        });
+
         let mut input = egui::RawInput::default();
         input.events.push(key_event(Key::ArrowUp));
         let _ = ctx.run(input, |ctx| {
@@ -868,5 +879,18 @@ mod tests {
         });
         assert_eq!(value, 42);
         assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+
+        for key in [Key::ArrowLeft, Key::ArrowRight] {
+            let mut input = egui::RawInput::default();
+            input.events.push(key_event(key));
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.s_spin(&mut value, 0..=100, false, "Experience");
+                    let _ = ui.button("Following control");
+                });
+            });
+            assert_eq!(value, 42);
+            assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+        }
     }
 }
