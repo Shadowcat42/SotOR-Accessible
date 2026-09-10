@@ -40,11 +40,7 @@ fn kotor_one(ui: UiRef, item: &mut Item, id: Id) {
     ui.ctx().set_data(current_key, current);
 
     if ui
-        .s_button(
-            "Remove selected upgrade",
-            false,
-            installed.is_empty(),
-        )
+        .s_button("Remove selected upgrade", false, installed.is_empty())
         .clicked()
     {
         item.upgrades &= !(1u32 << installed[current]);
@@ -81,13 +77,7 @@ fn kotor_two(ui: UiRef, item: &mut Item, id: Id) {
         .collect();
     let slot_key = id.with("k2_upgrade_slot");
     let mut selected = ui.ctx().get_data(slot_key).unwrap_or(0);
-    keyboard_list(
-        ui,
-        slot_key,
-        "Item upgrade slots",
-        &options,
-        &mut selected,
-    );
+    keyboard_list(ui, slot_key, "Item upgrade slots", &options, &mut selected);
     ui.ctx().set_data(slot_key, selected);
 
     set_spin_styles(ui);
