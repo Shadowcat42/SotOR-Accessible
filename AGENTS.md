@@ -90,22 +90,16 @@ For Windows releases, also verify:
 ## Git workflow
 
 - Keep `main` buildable and use small, focused commits.
-- Prefer creating a complete batch of local commits and pushing them together,
-  so GitHub Actions validates only the final commit in the push. If commits must
-  be pushed one at a time, include `[skip actions]` in every intermediate commit
-  message and omit it from the final commit so the final state is validated.
-- Documentation or workflow-maintenance commits that do not change the program
-  may use `[skip actions]`; validate the workflow syntax locally and let the next
-  source change exercise the hosted build.
+- Push ordinary commits normally; branch pushes do not run GitHub Actions. Use
+  `workflow_dispatch` when a hosted validation build is needed before tagging.
 
 - Separate mechanical/versioning changes from behavior changes.
 - Do not rewrite the imported A5 baseline commit.
-- Treat successful GitHub Actions runs as the automated build record. Every
-  push to `main` produces a temporary Windows executable artifact; a matching
-  version tag (for example, Cargo `1.2.0` with Git tag `v1.2.0`) publishes that
-  executable directly as `SOTOR-1.2.exe`. GitHub supplies the source archives;
-  do not wrap the release executable in another ZIP or bundle documentation
-  files with it.
+- Treat successful GitHub Actions runs as the automated build record. A matching
+  version tag (for example, Cargo `1.2.0` with Git tag `v1.2.0`) runs validation
+  and publishes the executable directly as `SOTOR-1.2.exe`. GitHub supplies the
+  source archives; do not wrap the release executable in another ZIP or bundle
+  documentation files with it.
 - Keep the repository private unless the owner explicitly decides otherwise;
   its private build-assets release contains data derived from installed games.
 - Before committing, inspect `git diff`, run `git diff --check`, and perform the
