@@ -11,6 +11,14 @@ use egui::{
 use emath::{pos2, vec2, Align, Numeric};
 use std::ops::RangeInclusive;
 
+const TYPE_AHEAD_TIMEOUT_SECONDS: f64 = 1.0;
+
+#[derive(Clone, Default)]
+struct TypeAheadState {
+    query: String,
+    last_input_time: f64,
+}
+
 pub fn color_text(text: &str, color: Color32) -> RichText {
     RichText::new(text).color(color)
 }
@@ -54,7 +62,8 @@ pub fn accessible_name(name: &str, description: Option<&str>) -> String {
 ///
 /// egui's popup combo boxes do not provide dependable Windows keyboard
 /// behavior. This control exposes one stable selector to the Tab order.
-/// Up/Down/Home/End change the selection without moving focus.
+/// Up/Down/Home/End change the selection without moving focus. Typing searches
+/// by progressively longer name prefixes until the one-second timeout expires.
 pub fn keyboard_list(
     ui: &mut Ui,
     id: impl std::hash::Hash,
@@ -100,56 +109,90 @@ pub fn keyboard_list(
                 },
             );
         });
-        ui.input_mut(|input| {
+        let used_navigation_key = ui.input_mut(|input| {
+            let mut used_navigation_key = false;
             if input.consume_key(Modifiers::NONE, Key::ArrowDown) {
                 *selected = (*selected + 1).min(options.len() - 1);
+                used_navigation_key = true;
             }
             if input.consume_key(Modifiers::NONE, Key::ArrowUp) {
                 *selected = selected.saturating_sub(1);
+                used_navigation_key = true;
             }
             if input.consume_key(Modifiers::NONE, Key::Home) {
                 *selected = 0;
+                used_navigation_key = true;
             }
             if input.consume_key(Modifiers::NONE, Key::End) {
                 *selected = options.len() - 1;
+                used_navigation_key = true;
             }
             // A combo box owns all arrow keys. Horizontal arrows do not
             // change this vertical list, but must never escape it either.
-            input.consume_key(Modifiers::NONE, Key::ArrowLeft);
-            input.consume_key(Modifiers::NONE, Key::ArrowRight);
+            used_navigation_key |= input.consume_key(Modifiers::NONE, Key::ArrowLeft);
+            used_navigation_key |= input.consume_key(Modifiers::NONE, Key::ArrowRight);
+            used_navigation_key
         });
 
-        let first_letter = ui.input_mut(|input| {
-            let mut first_letter = None;
+        let type_ahead_id = control_id.with("type_ahead");
+        if used_navigation_key {
+            ui.ctx()
+                .data_mut(|data| data.remove_temp::<TypeAheadState>(type_ahead_id));
+        }
+
+        let (typed, now) = ui.input_mut(|input| {
+            let mut typed = String::new();
             input.events.retain(|event| {
                 let egui::Event::Text(text) = event else {
                     return true;
                 };
-                let mut characters = text.chars();
-                let Some(character) = characters.next() else {
-                    return true;
-                };
-                if characters.next().is_some() || !character.is_alphanumeric() {
+                if text.is_empty() || !text.chars().all(char::is_alphanumeric) {
                     return true;
                 }
-                first_letter = Some(character);
+                typed.push_str(text);
                 false
             });
-            first_letter
+            (typed, input.time)
         });
-        if let Some(first_letter) = first_letter {
-            let sought: String = first_letter.to_lowercase().collect();
-            let start = (*selected + 1) % options.len();
-            if let Some(offset) = (0..options.len()).find(|offset| {
-                options[(start + offset) % options.len()]
-                    .trim_start()
-                    .chars()
-                    .next()
-                    .is_some_and(|character| character.to_lowercase().collect::<String>() == sought)
-            }) {
-                *selected = (start + offset) % options.len();
+        if !typed.is_empty() {
+            let typed = typed.to_lowercase();
+            let (query, continuing) = ui.ctx().data_mut(|data| {
+                let state = data.get_temp_mut_or_default::<TypeAheadState>(type_ahead_id);
+                let continuing = !state.query.is_empty()
+                    && now - state.last_input_time <= TYPE_AHEAD_TIMEOUT_SECONDS;
+                if !continuing {
+                    state.query.clear();
+                }
+                state.query.push_str(&typed);
+                state.last_input_time = now;
+                (state.query.clone(), continuing)
+            });
+
+            let start = if continuing {
+                *selected
+            } else {
+                (*selected + 1) % options.len()
+            };
+            if let Some(idx) = find_prefix_match(options, &query, start) {
+                *selected = idx;
+            } else if continuing {
+                // Repeated letters should retain the familiar behavior of
+                // cycling through all entries that begin with that letter.
+                ui.ctx().data_mut(|data| {
+                    let state = data.get_temp_mut_or_default::<TypeAheadState>(type_ahead_id);
+                    state.query.clone_from(&typed);
+                });
+                if let Some(idx) =
+                    find_prefix_match(options, &typed, (*selected + 1) % options.len())
+                {
+                    *selected = idx;
+                }
             }
         }
+    } else {
+        ui.ctx().data_mut(|data| {
+            data.remove_temp::<TypeAheadState>(control_id.with("type_ahead"));
+        });
     }
 
     let selected_name = options[*selected].clone();
@@ -198,6 +241,12 @@ pub fn keyboard_list(
         ui.ctx().request_repaint();
     }
     response
+}
+
+fn find_prefix_match(options: &[String], query: &str, start: usize) -> Option<usize> {
+    (0..options.len())
+        .map(|offset| (start + offset) % options.len())
+        .find(|idx| options[*idx].trim_start().to_lowercase().starts_with(query))
 }
 
 /// A proper accessible tab list with roving keyboard focus.
@@ -820,6 +869,67 @@ mod tests {
             assert_eq!(selected, expected);
             assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
         }
+    }
+
+    #[test]
+    fn keyboard_list_type_ahead_uses_the_complete_prefix() {
+        let ctx = egui::Context::default();
+        let control_id = Id::new("test_list").with("keyboard_list_control");
+        ctx.memory_mut(|memory| memory.request_focus(control_id));
+        let mut selected = 1;
+        let options = [
+            "Ion grenade".to_owned(),
+            "Orto's repeating blaster".to_owned(),
+            "Other item".to_owned(),
+        ];
+
+        for _ in 0..2 {
+            let _ = ctx.run(Default::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    keyboard_list(ui, "test_list", "Test list", &options, &mut selected);
+                });
+            });
+        }
+
+        let mut input = egui::RawInput {
+            time: Some(0.1),
+            ..Default::default()
+        };
+        input.events.push(egui::Event::Text("i".to_owned()));
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                keyboard_list(ui, "test_list", "Test list", &options, &mut selected);
+            });
+        });
+        assert_eq!(selected, 0);
+
+        let mut input = egui::RawInput {
+            time: Some(0.2),
+            ..Default::default()
+        };
+        input.events.push(egui::Event::Text("o".to_owned()));
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                keyboard_list(ui, "test_list", "Test list", &options, &mut selected);
+            });
+        });
+
+        assert_eq!(selected, 0);
+        assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+
+        let mut input = egui::RawInput {
+            time: Some(1.3),
+            ..Default::default()
+        };
+        input.events.push(egui::Event::Text("o".to_owned()));
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                keyboard_list(ui, "test_list", "Test list", &options, &mut selected);
+            });
+        });
+
+        assert_eq!(selected, 1);
+        assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
     }
 
     #[test]

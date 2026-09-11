@@ -45,7 +45,9 @@
 - Every feature must be keyboard-operable and expose a meaningful name, role,
   value, state, and action through AccessKit.
 - Arrow-key lists contribute one Tab stop. Up/Down changes selection without
-  moving focus; Left/Right must not escape combo-box-style lists.
+  moving focus; Left/Right must not escape combo-box-style lists. Consecutive
+  typed characters perform a timed prefix search, while repeated single letters
+  continue to cycle matching entries.
 - Editor pages use real tab roles. Left/Right, Home/End, Ctrl+Tab, and
   Ctrl+Shift+Tab change pages; Up/Down does not leave the selected tab.
 - Numeric editors expose one spin button, not a duplicate slider.
