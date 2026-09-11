@@ -23,11 +23,7 @@ pub struct Editor<'a> {
 }
 
 impl<'a> Editor<'a> {
-    pub fn new(
-        save: &'a mut Save,
-        data: &'a GameDataMapped,
-        clipboard_available: bool,
-    ) -> Self {
+    pub fn new(save: &'a mut Save, data: &'a GameDataMapped, clipboard_available: bool) -> Self {
         Self {
             items: &mut save.inventory,
             data,
@@ -82,7 +78,9 @@ impl<'a> Editor<'a> {
             .add_enabled(!sorted.is_empty(), Button::new("Remove selected item"))
             .clicked()
         {
-            let selected = self.selected.expect("enabled only when an item is selected");
+            let selected = self
+                .selected
+                .expect("enabled only when an item is selected");
             self.items.remove(selected);
             let remaining = sorted_inventory(self.items, &filter);
             cursor = cursor.min(remaining.len().saturating_sub(1));

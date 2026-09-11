@@ -43,9 +43,7 @@ impl<'a> Editor<'a> {
             .globals
             .iter()
             .enumerate()
-            .filter(|(_, global)| {
-                filter.is_empty() || global.name.to_lowercase().contains(&filter)
-            })
+            .filter(|(_, global)| filter.is_empty() || global.name.to_lowercase().contains(&filter))
             .map(|(idx, global)| {
                 let label = match &global.value {
                     GlobalValue::Number(value) => format!("{} — {value}", global.name),

@@ -11,7 +11,6 @@ use core::{Data, DataDescr, GameDataMapped, ItemSlot, UsableBy, WeaponType};
 use egui::{Button, Id};
 use std::{collections::HashSet, mem};
 
-
 const SELECTED_ID: &str = "ec_selected";
 const FIELD_ID: &str = "ec_accessible_field";
 const SKILLS: [&str; 8] = [
