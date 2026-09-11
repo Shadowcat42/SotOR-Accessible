@@ -96,10 +96,9 @@ impl<'a> Editor<'a> {
                 let options: Vec<_> = stage_ids
                     .iter()
                     .map(|id| {
-                        stages.get(id).map_or_else(
-                            || format!("{id} UNKNOWN"),
-                            |stage| stage_option(stage),
-                        )
+                        stages
+                            .get(id)
+                            .map_or_else(|| format!("{id} UNKNOWN"), |stage| stage_option(stage))
                     })
                     .collect();
                 let mut stage_cursor = stage_ids

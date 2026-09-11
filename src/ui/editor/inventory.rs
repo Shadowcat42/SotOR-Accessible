@@ -196,11 +196,7 @@ pub(super) fn reset_selection(ctx: &egui::Context) {
     ctx.set_data(CURRENT_CURSOR_ID, 0usize);
 }
 
-fn sorted_inventory(
-    items: &[Item],
-    data: &GameDataMapped,
-    filter: &str,
-) -> Vec<(usize, String)> {
+fn sorted_inventory(items: &[Item], data: &GameDataMapped, filter: &str) -> Vec<(usize, String)> {
     let mut sorted: Vec<_> = items
         .iter()
         .enumerate()
