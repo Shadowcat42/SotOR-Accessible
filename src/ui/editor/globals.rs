@@ -2,11 +2,14 @@ use crate::{
     save::{Global, GlobalValue, Save},
     ui::{
         styles::{set_checkbox_styles, set_spin_styles},
-        widgets::{keyboard_list, UiExt},
+        widgets::{keyboard_list, visual_label, UiExt},
         UiRef,
     },
     util::ContextExt,
 };
+
+const FILTER_ID: &str = "eg_global_filter";
+const CURSOR_ID: &str = "eg_selected_global";
 
 pub struct Editor<'a> {
     globals: &'a mut Vec<Global>,
@@ -25,29 +28,52 @@ impl<'a> Editor<'a> {
             return;
         }
 
-        let options: Vec<_> = self
+        visual_label(ui, "Filter global variables:");
+        let mut filter: String = ui.ctx().get_data(FILTER_ID).unwrap_or_default();
+        if ui
+            .s_text_edit(&mut filter, 300., "Filter global variables")
+            .changed()
+        {
+            ui.ctx().set_data(FILTER_ID, filter.clone());
+            ui.ctx().set_data(CURSOR_ID, 0usize);
+        }
+
+        let filter = filter.trim().to_lowercase();
+        let filtered: Vec<_> = self
             .globals
             .iter()
-            .map(|global| match &global.value {
-                GlobalValue::Number(value) => format!("{} — {value}", global.name),
-                GlobalValue::Boolean(value) => format!(
-                    "{} — {}",
-                    global.name,
-                    if *value { "true" } else { "false" }
-                ),
+            .enumerate()
+            .filter(|(_, global)| {
+                filter.is_empty() || global.name.to_lowercase().contains(&filter)
+            })
+            .map(|(idx, global)| {
+                let label = match &global.value {
+                    GlobalValue::Number(value) => format!("{} — {value}", global.name),
+                    GlobalValue::Boolean(value) => format!(
+                        "{} — {}",
+                        global.name,
+                        if *value { "true" } else { "false" }
+                    ),
+                };
+                (idx, label)
             })
             .collect();
-        let mut selected = ui.ctx().get_data("eg_selected_global").unwrap_or(0);
-        selected = selected.min(self.globals.len() - 1);
+        let options: Vec<_> = filtered.iter().map(|(_, label)| label.clone()).collect();
+        let mut cursor = ui.ctx().get_data(CURSOR_ID).unwrap_or(0);
         ui.columns(2, |columns| {
             keyboard_list(
                 &mut columns[0],
                 "eg_global_list",
                 "Global variable",
                 &options,
-                &mut selected,
+                &mut cursor,
             );
-            columns[0].ctx().set_data("eg_selected_global", selected);
+            columns[0].ctx().set_data(CURSOR_ID, cursor);
+
+            let Some(selected) = filtered.get(cursor).map(|(idx, _)| *idx) else {
+                columns[1].label("No global variables match the filter.");
+                return;
+            };
 
             let global = &mut self.globals[selected];
             match &mut global.value {

@@ -2,7 +2,7 @@ use crate::{
     save::{Item, Save},
     ui::{
         styles::{set_checkbox_styles, set_spin_styles, set_striped_styles, GREEN, WHITE},
-        widgets::{accessible_name, color_text, keyboard_list, UiExt},
+        widgets::{accessible_name, color_text, keyboard_list, visual_label, UiExt},
         UiRef,
     },
     util::ContextExt,
@@ -10,11 +10,15 @@ use crate::{
 use core::{Data as _, DataDescr as _, GameDataMapped};
 use egui::{Button, Grid, Id, Label};
 
+const CURRENT_FILTER_ID: &str = "ei_current_item_filter";
+const CURRENT_CURSOR_ID: &str = "ei_current_item_cursor";
+const AVAILABLE_FILTER_ID: &str = "ei_available_item_filter";
+const AVAILABLE_CURSOR_ID: &str = "ei_available_item_cursor";
 
 pub struct Editor<'a> {
     items: &'a mut Vec<Item>,
     data: &'a GameDataMapped,
-    selected: usize,
+    selected: Option<usize>,
 }
 
 impl<'a> Editor<'a> {
@@ -22,7 +26,7 @@ impl<'a> Editor<'a> {
         Self {
             items: &mut save.inventory,
             data,
-            selected: 0,
+            selected: None,
         }
     }
 
@@ -34,43 +38,42 @@ impl<'a> Editor<'a> {
     }
 
     fn list(&mut self, ui: UiRef) {
-        let mut sorted: Vec<_> = self
-            .items
-            .iter()
-            .enumerate()
-            .map(|(idx, item)| (idx, item.get_name().to_owned()))
-            .collect();
-        sorted.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+        visual_label(ui, "Filter current inventory:");
+        let mut filter: String = ui.ctx().get_data(CURRENT_FILTER_ID).unwrap_or_default();
+        if ui
+            .s_text_edit(&mut filter, 300., "Filter current inventory")
+            .changed()
+        {
+            ui.ctx().set_data(CURRENT_FILTER_ID, filter.clone());
+            ui.ctx().set_data(CURRENT_CURSOR_ID, 0usize);
+        }
+
+        let sorted = sorted_inventory(self.items, &filter);
         let options: Vec<_> = sorted.iter().map(|(_, name)| name.clone()).collect();
-        let key = Id::new("ei_current_item_cursor");
+        let key = Id::new(CURRENT_CURSOR_ID);
         let mut cursor = ui.ctx().get_data(key).unwrap_or(0);
         keyboard_list(ui, key, "Current inventory items", &options, &mut cursor);
         ui.ctx().set_data(key, cursor);
-        self.selected = sorted.get(cursor).map(|(idx, _)| *idx).unwrap_or(0);
+        self.selected = sorted.get(cursor).map(|(idx, _)| *idx);
 
         if ui
             .add_enabled(!sorted.is_empty(), Button::new("Remove selected item"))
             .clicked()
         {
-            self.items.remove(self.selected);
-            cursor = cursor.min(self.items.len().saturating_sub(1));
+            let selected = self.selected.expect("enabled only when an item is selected");
+            self.items.remove(selected);
+            let remaining = sorted_inventory(self.items, &filter);
+            cursor = cursor.min(remaining.len().saturating_sub(1));
             ui.ctx().set_data(key, cursor);
-            let mut remaining: Vec<_> = self
-                .items
-                .iter()
-                .enumerate()
-                .map(|(idx, item)| (idx, item.get_name()))
-                .collect();
-            remaining.sort_unstable_by(|a, b| a.1.cmp(b.1));
-            self.selected = remaining.get(cursor).map(|(idx, _)| *idx).unwrap_or(0);
+            self.selected = remaining.get(cursor).map(|(idx, _)| *idx);
         }
     }
 
     fn item(&mut self, ui: UiRef) {
-        if self.items.is_empty() {
+        let Some(selected) = self.selected else {
             return;
-        }
-        let item = &mut self.items[self.selected];
+        };
+        let item = &mut self.items[selected];
         let data_item = self.data.items.get(&item.tag);
         set_striped_styles(ui);
         Grid::new(ui.next_auto_id())
@@ -114,7 +117,6 @@ impl<'a> Editor<'a> {
                     ui.end_row();
                 }
             });
-
     }
 
     fn addition(&mut self, ui: UiRef) {
@@ -124,6 +126,17 @@ impl<'a> Editor<'a> {
         ui.s_checkbox(&mut checked, "Show all item templates");
         if checked != show_all {
             ui.ctx().set_data("ei_add_all", checked);
+            ui.ctx().set_data(AVAILABLE_CURSOR_ID, 0usize);
+        }
+
+        visual_label(ui, "Filter items available to add:");
+        let mut filter: String = ui.ctx().get_data(AVAILABLE_FILTER_ID).unwrap_or_default();
+        if ui
+            .s_text_edit(&mut filter, 300., "Filter items available to add")
+            .changed()
+        {
+            ui.ctx().set_data(AVAILABLE_FILTER_ID, filter.clone());
+            ui.ctx().set_data(AVAILABLE_CURSOR_ID, 0usize);
         }
 
         let available: Vec<_> = self
@@ -132,12 +145,13 @@ impl<'a> Editor<'a> {
             .items
             .iter()
             .filter(|item| checked || item.name.is_some())
+            .filter(|item| matches_filter(item.get_name(), &item.tag, &filter))
             .collect();
         let options: Vec<_> = available
             .iter()
             .map(|item| accessible_name(item.get_name(), item.get_description()))
             .collect();
-        let key = Id::new("ei_available_item_cursor");
+        let key = Id::new(AVAILABLE_CURSOR_ID);
         let mut cursor = ui.ctx().get_data(key).unwrap_or(0);
         keyboard_list(ui, key, "Items available to add", &options, &mut cursor);
         ui.ctx().set_data(key, cursor);
@@ -148,18 +162,38 @@ impl<'a> Editor<'a> {
         {
             let new_source_idx = self.items.len();
             self.items.push(available[cursor].into());
-            let mut sorted: Vec<_> = self
-                .items
-                .iter()
-                .enumerate()
-                .map(|(idx, item)| (idx, item.get_name()))
-                .collect();
-            sorted.sort_unstable_by(|a, b| a.1.cmp(b.1));
-            let current_cursor = sorted
+            let current_filter: String = ui
+                .ctx()
+                .get_data(CURRENT_FILTER_ID)
+                .unwrap_or_default();
+            let sorted = sorted_inventory(self.items, &current_filter);
+            if let Some(current_cursor) = sorted
                 .iter()
                 .position(|(idx, _)| *idx == new_source_idx)
-                .unwrap_or(0);
-            ui.ctx().set_data("ei_current_item_cursor", current_cursor);
+            {
+                ui.ctx().set_data(CURRENT_CURSOR_ID, current_cursor);
+            }
         }
     }
+}
+
+fn sorted_inventory(items: &[Item], filter: &str) -> Vec<(usize, String)> {
+    let mut sorted: Vec<_> = items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| matches_filter(item.get_name(), &item.tag, filter))
+        .map(|(idx, item)| (idx, item.get_name().to_owned()))
+        .collect();
+    sorted.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+    sorted
+}
+
+fn matches_filter(name: &str, tag: &str, filter: &str) -> bool {
+    let filter = filter.trim();
+    if filter.is_empty() {
+        return true;
+    }
+
+    let filter = filter.to_lowercase();
+    name.to_lowercase().contains(&filter) || tag.to_lowercase().contains(&filter)
 }
