@@ -77,7 +77,7 @@ jobs:
       - name: Build release executable
         run: cargo build --release --locked
 
-      - name: Package Windows release
+      - name: Prepare Windows executable
         id: package
         shell: pwsh
         run: |
@@ -91,36 +91,20 @@ jobs:
             throw "Release tag $env:GITHUB_REF_NAME does not match Cargo version $version (expected v$version)."
           }
 
-          $stageName = "SotOR-Accessible-$version-Windows"
-          $stagePath = Join-Path $env:RUNNER_TEMP $stageName
-          New-Item -ItemType Directory -Path $stagePath -Force | Out-Null
-
-          Copy-Item target\release\sotor.exe (Join-Path $stagePath "SotOR-Accessible.exe")
-          Copy-Item README.md, ACCESSIBILITY.md, RELEASE-NOTES.md, LICENSE $stagePath
-
-          $exePath = Join-Path $stagePath "SotOR-Accessible.exe"
-          $exeHash = (Get-FileHash -Algorithm SHA256 $exePath).Hash.ToLowerInvariant()
-          "$exeHash *SotOR-Accessible.exe" | Set-Content `
-            -Path (Join-Path $stagePath "SHA256SUMS.txt") `
-            -Encoding ascii
-
-          $archivePath = Join-Path $env:RUNNER_TEMP "$stageName.zip"
-          Compress-Archive -Path $stagePath -DestinationPath $archivePath -CompressionLevel Optimal
-          $archiveHash = (Get-FileHash -Algorithm SHA256 $archivePath).Hash.ToLowerInvariant()
-          $checksumPath = "$archivePath.sha256"
-          "$archiveHash *$stageName.zip" | Set-Content -Path $checksumPath -Encoding ascii
+          $displayVersion = $version -replace '\.0$', ''
+          $binaryName = "SOTOR-$displayVersion.exe"
+          $binaryPath = Join-Path $env:RUNNER_TEMP $binaryName
+          Copy-Item target\release\sotor.exe $binaryPath
 
           "version=$version" | Add-Content -Path $env:GITHUB_OUTPUT
-          "archive=$archivePath" | Add-Content -Path $env:GITHUB_OUTPUT
-          "checksum=$checksumPath" | Add-Content -Path $env:GITHUB_OUTPUT
+          "display_version=$displayVersion" | Add-Content -Path $env:GITHUB_OUTPUT
+          "binary=$binaryPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: SotOR-Accessible-${{ steps.package.outputs.version }}-Windows
-          path: |
-            ${{ steps.package.outputs.archive }}
-            ${{ steps.package.outputs.checksum }}
+          name: SOTOR-${{ steps.package.outputs.display_version }}-Windows
+          path: ${{ steps.package.outputs.binary }}
           if-no-files-found: error
           retention-days: 30
 
@@ -133,16 +117,14 @@ jobs:
         run: |
           if (gh release view $env:GITHUB_REF_NAME *> $null) {
             gh release upload $env:GITHUB_REF_NAME `
-              "${{ steps.package.outputs.archive }}" `
-              "${{ steps.package.outputs.checksum }}" `
+              "${{ steps.package.outputs.binary }}" `
               --clobber
             gh release edit $env:GITHUB_REF_NAME `
               --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
               --notes-file RELEASE-NOTES.md
           } else {
             gh release create $env:GITHUB_REF_NAME `
-              "${{ steps.package.outputs.archive }}" `
-              "${{ steps.package.outputs.checksum }}" `
+              "${{ steps.package.outputs.binary }}" `
               --verify-tag `
               --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
               --notes-file RELEASE-NOTES.md

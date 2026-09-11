@@ -101,8 +101,11 @@ For Windows releases, also verify:
 - Separate mechanical/versioning changes from behavior changes.
 - Do not rewrite the imported A5 baseline commit.
 - Treat successful GitHub Actions runs as the automated build record. Every
-  push to `main` produces a temporary Windows artifact; a matching version tag
-  (for example, Cargo `1.2.0` with Git tag `v1.2.0`) publishes a release.
+  push to `main` produces a temporary Windows executable artifact; a matching
+  version tag (for example, Cargo `1.2.0` with Git tag `v1.2.0`) publishes that
+  executable directly as `SOTOR-1.2.exe`. GitHub supplies the source archives;
+  do not wrap the release executable in another ZIP or bundle documentation
+  files with it.
 - Keep the repository private unless the owner explicitly decides otherwise;
   its private build-assets release contains data derived from installed games.
 - Before committing, inspect `git diff`, run `git diff --check`, and perform the
