@@ -7,7 +7,7 @@ use crate::{
     },
     util::{get_data_name, ContextExt as _},
 };
-use core::{GameDataMapped, Quest};
+use core::{GameDataMapped, Quest, QuestStage};
 use egui::Id;
 use std::{
     collections::HashSet,
@@ -98,7 +98,7 @@ impl<'a> Editor<'a> {
                     .map(|id| {
                         stages.get(id).map_or_else(
                             || format!("{id} UNKNOWN"),
-                            |stage| accessible_name(&stage.get_name(60), Some(&stage.description)),
+                            |stage| stage_option(stage),
                         )
                     })
                     .collect();
@@ -205,7 +205,7 @@ impl<'a> Editor<'a> {
                         .iter()
                         .map(|id| {
                             let stage = &quest.stages[id];
-                            accessible_name(&stage.get_name(40), Some(&stage.description))
+                            stage_option(stage)
                         })
                         .collect()
                 })
@@ -243,5 +243,29 @@ impl<'a> Editor<'a> {
             state.id = String::new();
             state.stage = 0;
         }
+    }
+}
+
+fn stage_option(stage: &QuestStage) -> String {
+    accessible_name(&stage.id.to_string(), Some(&stage.description))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::stage_option;
+    use core::QuestStage;
+
+    #[test]
+    fn quest_stage_option_announces_its_description_once() {
+        let stage = QuestStage {
+            id: 90,
+            description: "Canderous needs time to think about Jagi.".to_owned(),
+            end: false,
+        };
+
+        assert_eq!(
+            stage_option(&stage),
+            "90. Description: Canderous needs time to think about Jagi."
+        );
     }
 }
