@@ -1,18 +1,21 @@
-# SotOR Accessible Edition 1.1
+# SotOR Accessible Edition 1.2
 
-This release continues the keyboard and screen-reader polish of the redesigned
-editor.
+This release adds faster navigation for large save-data collections and safe
+KSE-style inventory transfer between saves.
 
-- Numeric spin buttons now keep keyboard focus when Left or Right is pressed,
-  while Up and Down continue to change the value by exactly one.
-- Combo-box-style lists support first-letter navigation. Repeating a letter
-  cycles through matching entries and wraps around the list.
-- Inventory and equipped items can now expose and edit their installed upgrade
-  data in both KotOR games.
-- KotOR I upgrades are represented by the installed `upgrade.2da` rows; KotOR
-  II exposes its six upgrade slots. The bundled data does not include upgrade
-  names, so this advanced editor deliberately uses exact row numbers and warns
-  users to choose only upgrades compatible with the item.
+- The Inventory page now provides separate filters for the current inventory
+  and the full list of item templates available to add.
+- The Globals page now filters both current globals and globals available to
+  add.
+- A loaded save's complete unequipped inventory can be copied and used to
+  replace another save's unequipped inventory. The confirmation identifies the
+  source and destination saves, and cross-game pasting is rejected.
+- Inventory copying preserves complete item structures, including custom raw
+  data, but never changes equipped character items or other save data.
+- Pasted inventory remains an in-memory edit until Save is chosen, preserving
+  the normal unsaved-change warning and `backup.zip` behavior.
+- The experimental item-upgrade editor has been removed. Upgrade components can
+  still be added to inventory and installed through the game itself.
 - The original SotOR save-reading and save-writing engine remains unchanged.
 
 This executable is unsigned. Continue testing on a copied save until the NVDA

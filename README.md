@@ -40,7 +40,7 @@ I would like to add support for the console versions, but I don't own any of the
 
 Official Windows packages are built by the `Windows build` GitHub Actions
 workflow. Every push to `main` produces a downloadable workflow artifact, and
-pushing a version tag such as `v1.1.0` also creates a GitHub release. The
+pushing a version tag such as `v1.2.0` also creates a GitHub release. The
 workflow uses the private, checksum-verified `sotor-assets.zip` attached to the
 `build-assets-v1` repository release, so no game installation or local compiler
 is required.
