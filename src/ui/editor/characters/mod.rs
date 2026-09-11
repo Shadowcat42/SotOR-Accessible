@@ -11,7 +11,6 @@ use core::{Data, DataDescr, GameDataMapped, ItemSlot, UsableBy, WeaponType};
 use egui::{Button, Id};
 use std::{collections::HashSet, mem};
 
-use super::item_upgrades;
 
 const SELECTED_ID: &str = "ec_selected";
 const FIELD_ID: &str = "ec_accessible_field";
@@ -589,15 +588,6 @@ impl<'a> Editor<'a> {
                     }
                 }
             }
-        }
-
-        let game = self.save.game;
-        if let Some(item) = self.save.characters[self.selected].equipment[slot_idx].as_mut() {
-            let upgrade_id = Id::new("character_item_upgrades")
-                .with(self.selected)
-                .with(slot_idx)
-                .with(&item.tag);
-            item_upgrades::show(ui, item, game, upgrade_id);
         }
     }
 
