@@ -46,7 +46,7 @@ pub fn accessible_name(name: &str, description: Option<&str>) -> String {
     let Some(description) = description else {
         return name.to_owned();
     };
-    let description = shorten_string(&description.replace(['\r', '\n'], " "), 300);
+    let description = description.replace(['\r', '\n'], " ");
     format!("{name}. Description: {description}")
 }
 
@@ -687,6 +687,18 @@ pub fn on_hover_text_side(ui: UiRef, r: &Response, text: &str) {
 mod tests {
     use super::*;
     use egui::accesskit::{Action, Role};
+
+    #[test]
+    fn accessible_name_preserves_the_complete_description() {
+        let description = format!(
+            "{}The ending must be announced.",
+            "Long description. ".repeat(30)
+        );
+        let name = accessible_name("Test item", Some(&description));
+
+        assert!(name.ends_with("The ending must be announced."));
+        assert_eq!(name, format!("Test item. Description: {description}"));
+    }
 
     #[test]
     fn keyboard_list_has_one_named_tab_stop_and_no_unknown_focus_nodes() {
