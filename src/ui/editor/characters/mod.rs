@@ -8,7 +8,7 @@ use crate::{
     util::{get_data_name, ContextExt},
 };
 use core::{Data, DataDescr, GameDataMapped, ItemSlot, UsableBy, WeaponType};
-use egui::{Button, Id};
+use egui::Id;
 use std::{collections::HashSet, mem};
 
 const SELECTED_ID: &str = "ec_selected";
@@ -652,7 +652,7 @@ impl<'a> Editor<'a> {
         );
         ui.ctx().set_data(current_key, current_cursor);
         if ui
-            .add_enabled(!current.is_empty(), Button::new("Remove selected feat"))
+            .s_button("Remove selected feat", false, current.is_empty())
             .clicked()
         {
             self.save.characters[self.selected]
@@ -684,7 +684,7 @@ impl<'a> Editor<'a> {
         );
         ui.ctx().set_data(available_key, cursor);
         if ui
-            .add_enabled(!available.is_empty(), Button::new("Add selected feat"))
+            .s_button("Add selected feat", false, available.is_empty())
             .clicked()
         {
             self.save.characters[self.selected]
@@ -708,10 +708,7 @@ impl<'a> Editor<'a> {
         keyboard_list(ui, current_key, "Current classes", &options, &mut cursor);
         ui.ctx().set_data(current_key, cursor);
         if ui
-            .add_enabled(
-                !current_ids.is_empty(),
-                Button::new("Remove selected class"),
-            )
+            .s_button("Remove selected class", false, current_ids.is_empty())
             .clicked()
         {
             self.save.characters[self.selected].classes.remove(cursor);
@@ -738,7 +735,7 @@ impl<'a> Editor<'a> {
         );
         ui.ctx().set_data(available_key, available_cursor);
         if ui
-            .add_enabled(!available.is_empty(), Button::new("Add selected class"))
+            .s_button("Add selected class", false, available.is_empty())
             .clicked()
         {
             let class = available[available_cursor];
@@ -787,7 +784,7 @@ impl<'a> Editor<'a> {
         keyboard_list(ui, current_key, "Current powers", &options, &mut cursor);
         ui.ctx().set_data(current_key, cursor);
         if ui
-            .add_enabled(!current.is_empty(), Button::new("Remove selected power"))
+            .s_button("Remove selected power", false, current.is_empty())
             .clicked()
         {
             self.save.characters[self.selected].classes[class_idx]
@@ -830,7 +827,7 @@ impl<'a> Editor<'a> {
         );
         ui.ctx().set_data(available_key, available_cursor);
         if ui
-            .add_enabled(!available.is_empty(), Button::new("Add selected power"))
+            .s_button("Add selected power", false, available.is_empty())
             .clicked()
         {
             self.save.characters[self.selected].classes[class_idx]

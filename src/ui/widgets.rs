@@ -15,6 +15,33 @@ pub fn color_text(text: &str, color: Color32) -> RichText {
     RichText::new(text).color(color)
 }
 
+fn contain_button_arrows(ui: &mut Ui, response: &Response) {
+    if !response.has_focus() {
+        return;
+    }
+
+    ui.memory_mut(|memory| {
+        memory.set_focus_lock_filter(
+            response.id,
+            EventFilter {
+                horizontal_arrows: true,
+                vertical_arrows: true,
+                ..Default::default()
+            },
+        );
+    });
+    ui.input_mut(|input| {
+        for key in [
+            Key::ArrowLeft,
+            Key::ArrowRight,
+            Key::ArrowUp,
+            Key::ArrowDown,
+        ] {
+            input.consume_key(Modifiers::NONE, key);
+        }
+    });
+}
+
 pub fn accessible_name(name: &str, description: Option<&str>) -> String {
     let Some(description) = description else {
         return name.to_owned();
@@ -355,12 +382,15 @@ impl UiExt for Ui {
         if selected {
             btn = btn.stroke((2., WHITE));
         }
-        self.add_enabled(!disabled, btn)
+        let response = self
+            .add_enabled(!disabled, btn)
             .on_hover_cursor(if disabled {
                 CursorIcon::NotAllowed
             } else {
                 CursorIcon::PointingHand
-            })
+            });
+        contain_button_arrows(self, &response);
+        response
     }
 
     fn s_button_basic(&mut self, text: &str) -> Response {
@@ -521,6 +551,8 @@ impl<'a> Widget for IconButton<'a> {
             response = response.on_hover_text(hint);
         }
         response = response.on_hover_cursor(CursorIcon::PointingHand);
+
+        contain_button_arrows(ui, &response);
 
         response
     }
@@ -956,6 +988,44 @@ mod tests {
                 });
             });
             assert_eq!(value, 42);
+            assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+        }
+    }
+
+    #[test]
+    fn button_arrows_do_not_move_focus() {
+        let ctx = egui::Context::default();
+        let mut control_id = None;
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                control_id = Some(ui.s_button_basic("Test button").id);
+                let _ = ui.s_button_basic("Following button");
+            });
+        });
+        let control_id = control_id.unwrap();
+        ctx.memory_mut(|memory| memory.request_focus(control_id));
+
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let _ = ui.s_button_basic("Test button");
+                let _ = ui.s_button_basic("Following button");
+            });
+        });
+
+        for key in [
+            Key::ArrowLeft,
+            Key::ArrowRight,
+            Key::ArrowUp,
+            Key::ArrowDown,
+        ] {
+            let mut input = egui::RawInput::default();
+            input.events.push(key_event(key));
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let _ = ui.s_button_basic("Test button");
+                    let _ = ui.s_button_basic("Following button");
+                });
+            });
             assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
         }
     }

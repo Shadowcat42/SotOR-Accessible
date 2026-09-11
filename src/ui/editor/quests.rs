@@ -8,7 +8,7 @@ use crate::{
     util::{get_data_name, ContextExt as _},
 };
 use core::{GameDataMapped, Quest};
-use egui::{Button, Id};
+use egui::Id;
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex},
@@ -124,7 +124,7 @@ impl<'a> Editor<'a> {
                 );
             }
             if columns[2]
-                .add(Button::new(format!("Remove quest {name}")))
+                .s_button_basic(&format!("Remove quest {name}"))
                 .clicked()
             {
                 remove = Some(source_idx);

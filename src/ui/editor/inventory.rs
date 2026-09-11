@@ -8,7 +8,7 @@ use crate::{
     util::{ContextExt, Message},
 };
 use core::{Data as _, DataDescr as _, GameDataMapped};
-use egui::{Button, Grid, Id, Label};
+use egui::{Grid, Id, Label};
 
 const CURRENT_FILTER_ID: &str = "ei_current_item_filter";
 const CURRENT_CURSOR_ID: &str = "ei_current_item_cursor";
@@ -75,7 +75,7 @@ impl<'a> Editor<'a> {
         self.selected = sorted.get(cursor).map(|(idx, _)| *idx);
 
         if ui
-            .add_enabled(!sorted.is_empty(), Button::new("Remove selected item"))
+            .s_button("Remove selected item", false, sorted.is_empty())
             .clicked()
         {
             let selected = self
@@ -177,7 +177,7 @@ impl<'a> Editor<'a> {
         ui.ctx().set_data(key, cursor);
 
         if ui
-            .add_enabled(!available.is_empty(), Button::new("Add selected item"))
+            .s_button("Add selected item", false, available.is_empty())
             .clicked()
         {
             let new_source_idx = self.items.len();
