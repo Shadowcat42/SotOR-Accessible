@@ -5,7 +5,7 @@ use crate::{
         widgets::{accessible_name, color_text, keyboard_list, visual_label, UiExt},
         UiRef,
     },
-    util::ContextExt,
+    util::{ContextExt, Message},
 };
 use core::{Data as _, DataDescr as _, GameDataMapped};
 use egui::{Button, Grid, Id, Label};
@@ -19,22 +19,44 @@ pub struct Editor<'a> {
     items: &'a mut Vec<Item>,
     data: &'a GameDataMapped,
     selected: Option<usize>,
+    clipboard_available: bool,
 }
 
 impl<'a> Editor<'a> {
-    pub fn new(save: &'a mut Save, data: &'a GameDataMapped) -> Self {
+    pub fn new(
+        save: &'a mut Save,
+        data: &'a GameDataMapped,
+        clipboard_available: bool,
+    ) -> Self {
         Self {
             items: &mut save.inventory,
             data,
             selected: None,
+            clipboard_available,
         }
     }
 
     pub fn show(&mut self, ui: UiRef) {
+        self.clipboard_actions(ui);
+        ui.separator();
         self.list(ui);
         self.item(ui);
         ui.separator();
         self.addition(ui);
+    }
+
+    fn clipboard_actions(&self, ui: UiRef) {
+        ui.horizontal(|ui| {
+            if ui.s_button_basic("Copy inventory").clicked() {
+                ui.ctx().send_message(Message::CopyInventory);
+            }
+            if ui
+                .s_button("Paste inventory", false, !self.clipboard_available)
+                .clicked()
+            {
+                ui.ctx().send_message(Message::PasteInventory);
+            }
+        });
     }
 
     fn list(&mut self, ui: UiRef) {
@@ -175,6 +197,10 @@ impl<'a> Editor<'a> {
             }
         }
     }
+}
+
+pub(super) fn reset_selection(ctx: &egui::Context) {
+    ctx.set_data(CURRENT_CURSOR_ID, 0usize);
 }
 
 fn sorted_inventory(items: &[Item], filter: &str) -> Vec<(usize, String)> {

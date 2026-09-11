@@ -9,6 +9,8 @@ pub enum Message {
     Save,
     CloseSave,
     ReloadSave,
+    CopyInventory,
+    PasteInventory,
     #[cfg(target_arch = "wasm32")]
     LoadSaveFromFiles(HashMap<String, Vec<u8>>),
     #[cfg(not(target_arch = "wasm32"))]

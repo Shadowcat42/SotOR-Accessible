@@ -1,7 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
 use crate::util::{get_extra_save_directories, read_dir_dirs, Directory};
 use crate::{
-    save::Save,
+    save::{Item, Save},
     util::{load_default_game_data, ContextExt as _, Game, Message},
 };
 #[cfg(target_arch = "wasm32")]
@@ -17,6 +17,8 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use self::toasts::{init_toasts, make_toast};
+#[cfg(target_arch = "wasm32")]
+use self::widgets::UiExt as _;
 
 mod editor;
 #[cfg(not(target_arch = "wasm32"))]
@@ -42,10 +44,40 @@ struct PersistentState {
     game_paths: [Option<String>; Game::COUNT],
 }
 
+#[derive(Clone)]
+struct InventoryClipboard {
+    items: Vec<Item>,
+    game: Game,
+    source: String,
+}
+
+impl InventoryClipboard {
+    fn copy(items: &[Item], game: Game, source: String) -> Self {
+        Self {
+            items: items.to_vec(),
+            game,
+            source,
+        }
+    }
+
+    fn paste_into(&self, game: Game, inventory: &mut Vec<Item>) -> Result<usize, String> {
+        if self.game != game {
+            return Err(format!(
+                "Inventory copied from KotOR {} cannot be pasted into KotOR {game}",
+                self.game
+            ));
+        }
+
+        *inventory = self.items.clone();
+        Ok(inventory.len())
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub struct SotorApp {
     save: Option<Save>,
     persisted_save: Option<Save>,
+    inventory_clipboard: Option<InventoryClipboard>,
     channel: (Sender<Message>, Receiver<Message>),
     default_game_data: [GameDataMapped; Game::COUNT],
     toasts: Toasts,
@@ -62,6 +94,8 @@ pub struct SotorApp {
 pub struct SotorApp {
     save: Option<Save>,
     persisted_save: Option<Save>,
+    inventory_clipboard: Option<InventoryClipboard>,
+    inventory_paste_confirmation_open: bool,
     channel: (Sender<Message>, Receiver<Message>),
     default_game_data: [GameDataMapped; Game::COUNT],
     toasts: Toasts,
@@ -82,6 +116,7 @@ impl SotorApp {
             let mut app = Self {
                 save: None,
                 persisted_save: None,
+                inventory_clipboard: None,
                 save_path: None,
                 channel: (sender, receiver),
                 default_game_data,
@@ -104,6 +139,8 @@ impl SotorApp {
             Self {
                 save: None,
                 persisted_save: None,
+                inventory_clipboard: None,
+                inventory_paste_confirmation_open: false,
                 channel: (sender, receiver),
                 default_game_data,
                 toasts,
@@ -161,6 +198,64 @@ impl SotorApp {
             self.add_toast("Reloaded successfully", None, true);
         }
     }
+
+    fn announce(&self, ctx: &Context, announcement: String) {
+        ctx.output_mut(|output| {
+            output
+                .events
+                .push(OutputEvent::ValueChanged(WidgetInfo::labeled(
+                    WidgetType::Other,
+                    announcement,
+                )));
+        });
+    }
+
+    fn copy_inventory(&mut self, ctx: &Context) {
+        let Some(source) = self.loaded_save_label() else {
+            return;
+        };
+        let clipboard = {
+            let save = self.save.as_ref().expect("a loaded save has a label");
+            InventoryClipboard::copy(&save.inventory, save.game, source)
+        };
+        let count = clipboard.items.len();
+        let announcement = format!(
+            "Copied {count} unequipped inventory {} from {}",
+            if count == 1 { "item" } else { "items" },
+            clipboard.source
+        );
+        self.inventory_clipboard = Some(clipboard);
+        self.add_toast(announcement.clone(), None, true);
+        self.announce(ctx, announcement);
+    }
+
+    fn apply_inventory_paste(&mut self, ctx: &Context) {
+        let Some(clipboard) = self.inventory_clipboard.as_ref() else {
+            return;
+        };
+        let source = clipboard.source.clone();
+        let result = self
+            .save
+            .as_mut()
+            .ok_or_else(|| "No save is loaded".to_owned())
+            .and_then(|save| clipboard.paste_into(save.game, &mut save.inventory));
+
+        match result {
+            Ok(count) => {
+                editor::reset_inventory_selection(ctx);
+                let announcement = format!(
+                    "Replaced the current unequipped inventory with {count} {} from {source}. Save to write the change to disk",
+                    if count == 1 { "item" } else { "items" }
+                );
+                self.add_toast(announcement.clone(), None, true);
+                self.announce(ctx, announcement);
+            }
+            Err(err) => {
+                self.add_toast("Couldn't paste inventory:", Some(err.clone()), false);
+                self.announce(ctx, format!("Couldn't paste inventory: {err}"));
+            }
+        }
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -171,6 +266,68 @@ impl SotorApp {
         };
 
         ctx.set_meta_id(&self.default_game_data[save.game.idx()], save);
+    }
+
+    fn loaded_save_label(&self) -> Option<String> {
+        let save = self.save.as_ref()?;
+        Some(format!("KotOR {} save {}", save.game, save.nfo.save_name))
+    }
+
+    fn request_paste_inventory(&mut self, ctx: &Context) {
+        let Some(clipboard) = self.inventory_clipboard.as_ref() else {
+            return;
+        };
+        let Some(save) = self.save.as_ref() else {
+            return;
+        };
+        if clipboard.game != save.game {
+            let err = format!(
+                "Inventory copied from KotOR {} cannot be pasted into KotOR {}",
+                clipboard.game, save.game
+            );
+            self.add_toast("Couldn't paste inventory:", Some(err.clone()), false);
+            self.announce(ctx, format!("Couldn't paste inventory: {err}"));
+            return;
+        }
+
+        self.inventory_paste_confirmation_open = true;
+        ctx.request_repaint();
+    }
+
+    fn show_inventory_paste_confirmation(&mut self, ctx: &Context) {
+        if !self.inventory_paste_confirmation_open {
+            return;
+        }
+
+        let Some(clipboard) = self.inventory_clipboard.as_ref() else {
+            self.inventory_paste_confirmation_open = false;
+            return;
+        };
+        let source = clipboard.source.clone();
+        let destination = self
+            .loaded_save_label()
+            .unwrap_or_else(|| "the loaded save".to_owned());
+        let mut paste = false;
+        let mut cancel = false;
+        egui::Window::new("Confirm inventory replacement")
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.label(format!(
+                    "Replace the entire unequipped inventory in {destination} with the inventory copied from {source}? Equipped items and other save data will not change. The replacement remains unsaved until you choose Save."
+                ));
+                ui.horizontal(|ui| {
+                    paste = ui.s_button_basic("Replace inventory").clicked();
+                    cancel = ui.s_button_basic("Cancel").clicked();
+                });
+            });
+
+        if paste {
+            self.inventory_paste_confirmation_open = false;
+            self.apply_inventory_paste(ctx);
+        } else if cancel {
+            self.inventory_paste_confirmation_open = false;
+        }
     }
 
     fn load_save(&mut self, files: &HashMap<String, Vec<u8>>, ctx: &Context) {
@@ -213,6 +370,55 @@ impl SotorApp {
             &self.default_game_data[save.game.idx()]
         };
         ctx.set_meta_id(game_data, save);
+    }
+
+    fn loaded_save_label(&self) -> Option<String> {
+        let save = self.save.as_ref()?;
+        let save_name = save.nfo.save_name.trim();
+        let folder_label = self
+            .save_path
+            .as_deref()
+            .map(|path| self.save_label(path))
+            .unwrap_or_else(|| format!("KotOR {} save", save.game));
+        if save_name.is_empty() || folder_label.contains(save_name) {
+            Some(folder_label)
+        } else {
+            Some(format!("{folder_label}, named {save_name}"))
+        }
+    }
+
+    fn request_paste_inventory(&mut self, ctx: &Context) {
+        let Some(clipboard) = self.inventory_clipboard.as_ref() else {
+            return;
+        };
+        let Some(save) = self.save.as_ref() else {
+            return;
+        };
+        if clipboard.game != save.game {
+            let err = format!(
+                "Inventory copied from KotOR {} cannot be pasted into KotOR {}",
+                clipboard.game, save.game
+            );
+            self.add_toast("Couldn't paste inventory:", Some(err.clone()), false);
+            self.announce(ctx, format!("Couldn't paste inventory: {err}"));
+            return;
+        }
+
+        let destination = self
+            .loaded_save_label()
+            .unwrap_or_else(|| "the loaded save".to_owned());
+        let confirmed = rfd::MessageDialog::new()
+            .set_title("Replace unequipped inventory?")
+            .set_description(format!(
+                "Replace the entire unequipped inventory in {destination} with the inventory copied from {}?\n\nEquipped items and other save data will not change. The replacement remains unsaved until you choose Save.",
+                clipboard.source
+            ))
+            .set_level(rfd::MessageLevel::Warning)
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .show();
+        if confirmed == rfd::MessageDialogResult::Yes {
+            self.apply_inventory_paste(ctx);
+        }
     }
 
     fn save(&mut self) {
@@ -509,6 +715,8 @@ impl eframe::App for SotorApp {
                 Message::Save => self.save(),
                 Message::CloseSave => self.close_save(),
                 Message::ReloadSave => self.reload_save(ctx),
+                Message::CopyInventory => self.copy_inventory(ctx),
+                Message::PasteInventory => self.request_paste_inventory(ctx),
                 Message::LoadSaveFromDir(path) => {
                     self.request_load_save(path, ctx);
                 }
@@ -523,6 +731,8 @@ impl eframe::App for SotorApp {
                 Message::Save => self.save(),
                 Message::CloseSave => self.close_save(),
                 Message::ReloadSave => self.reload_save(ctx),
+                Message::CopyInventory => self.copy_inventory(ctx),
+                Message::PasteInventory => self.request_paste_inventory(ctx),
                 Message::LoadSaveFromFiles(files) => self.load_save(&files, ctx),
             }
         }
@@ -554,6 +764,7 @@ impl eframe::App for SotorApp {
                 ui.label(format!("Status: {}", self.last_status));
                 ui.separator();
             }
+            let inventory_clipboard_available = self.inventory_clipboard.is_some();
             if let Some(save) = &mut self.save {
                 #[cfg(not(target_arch = "wasm32"))]
                 let current_data = if let Some(data) = &self.game_data[save.game.idx()] {
@@ -563,12 +774,124 @@ impl eframe::App for SotorApp {
                 };
                 #[cfg(target_arch = "wasm32")]
                 let current_data = &self.default_game_data[save.game.idx()];
-                editor::Editor::new(save, current_data).show(ui);
+                editor::Editor::new(save, current_data, inventory_clipboard_available).show(ui);
             } else {
                 editor::editor_placeholder(ui);
             }
         });
 
+        #[cfg(target_arch = "wasm32")]
+        self.show_inventory_paste_confirmation(ctx);
+
         self.toasts.show(ctx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::gff::{Field, Struct};
+
+    fn item(tag: &str, stack_size: u16, raw_marker: &str) -> Item {
+        Item {
+            tag: tag.to_owned(),
+            base_item: 1,
+            name: Some(format!("Item {tag}")),
+            description: Some(format!("Description {tag}")),
+            stack_size,
+            max_charges: 4,
+            charges: 3,
+            new: false,
+            upgrades: 7,
+            upgrade_slots: Some([1, 2, 3, 4, 5, 6]),
+            raw: Struct::new(vec![(
+                "CustomRawMarker",
+                Field::String(raw_marker.to_owned()),
+            )]),
+        }
+    }
+
+    #[test]
+    fn copying_inventory_is_independent_and_does_not_mutate_source() {
+        let mut source = vec![item("source", 2, "source raw data")];
+        let original = source.clone();
+
+        let clipboard =
+            InventoryClipboard::copy(&source, Game::One, "KotOR 1 source save".to_owned());
+
+        assert_eq!(source, original);
+        source[0].stack_size = 99;
+        source[0]
+            .raw
+            .insert("CustomRawMarker", Field::String("changed".to_owned()));
+        assert_eq!(clipboard.items, original);
+    }
+
+    #[test]
+    fn paste_replaces_inventory_and_destination_does_not_alias_clipboard() {
+        let source = vec![
+            item("source-a", 2, "custom a"),
+            item("source-b", 3, "custom b"),
+        ];
+        let clipboard =
+            InventoryClipboard::copy(&source, Game::One, "KotOR 1 source save".to_owned());
+        let mut destination = vec![item("destination", 8, "destination raw data")];
+
+        assert_eq!(clipboard.paste_into(Game::One, &mut destination), Ok(2));
+        assert_eq!(destination, source);
+        assert!(!destination.iter().any(|item| item.tag == "destination"));
+        assert_eq!(destination[0].raw, clipboard.items[0].raw);
+
+        destination[0].stack_size = 42;
+        destination[0]
+            .raw
+            .insert("CustomRawMarker", Field::String("changed".to_owned()));
+        assert_eq!(clipboard.items, source);
+    }
+
+    #[test]
+    fn empty_inventory_can_be_copied_and_pasted() {
+        let clipboard =
+            InventoryClipboard::copy(&[], Game::Two, "KotOR 2 empty save".to_owned());
+        let mut destination = vec![item("destination", 1, "destination raw data")];
+
+        assert_eq!(clipboard.paste_into(Game::Two, &mut destination), Ok(0));
+        assert!(destination.is_empty());
+    }
+
+    #[test]
+    fn cross_game_paste_is_rejected_without_changing_inventory_or_equipment() {
+        let clipboard = InventoryClipboard::copy(
+            &[item("source", 2, "source raw data")],
+            Game::One,
+            "KotOR 1 source save".to_owned(),
+        );
+        let mut destination = vec![item("destination", 5, "destination raw data")];
+        let original_destination = destination.clone();
+        let equipment = vec![Some(item("equipped", 1, "equipped raw data"))];
+        let original_equipment = equipment.clone();
+
+        let result = clipboard.paste_into(Game::Two, &mut destination);
+
+        assert!(result.is_err());
+        assert_eq!(destination, original_destination);
+        assert_eq!(equipment, original_equipment);
+    }
+
+    #[test]
+    fn same_game_paste_does_not_touch_equipped_items() {
+        let clipboard = InventoryClipboard::copy(
+            &[item("source", 2, "source raw data")],
+            Game::One,
+            "KotOR 1 source save".to_owned(),
+        );
+        let mut destination = vec![item("destination", 5, "destination raw data")];
+        let equipment = vec![Some(item("equipped", 1, "equipped raw data"))];
+        let original_equipment = equipment.clone();
+
+        clipboard.paste_into(Game::One, &mut destination).unwrap();
+
+        assert_eq!(destination, clipboard.items);
+        assert_eq!(equipment, original_equipment);
     }
 }

@@ -90,11 +90,20 @@ static TAB_ID: &str = "e_id";
 pub struct Editor<'a> {
     save: &'a mut Save,
     data: &'a GameDataMapped,
+    inventory_clipboard_available: bool,
 }
 
 impl<'a> Editor<'a> {
-    pub fn new(save: &'a mut Save, data: &'a GameDataMapped) -> Self {
-        Self { save, data }
+    pub fn new(
+        save: &'a mut Save,
+        data: &'a GameDataMapped,
+        inventory_clipboard_available: bool,
+    ) -> Self {
+        Self {
+            save,
+            data,
+            inventory_clipboard_available,
+        }
     }
 
     pub fn show(&mut self, ui: UiRef) {
@@ -164,8 +173,17 @@ impl<'a> Editor<'a> {
             Tab::Globals => globals::Editor::new(self.save).show(ui),
             Tab::Characters => characters::Editor::new(self.save, self.data).show(ui),
             Tab::Quests => quests::Editor::new(self.save, self.data).show(ui),
-            Tab::Inventory => inventory::Editor::new(self.save, self.data).show(ui),
+            Tab::Inventory => inventory::Editor::new(
+                self.save,
+                self.data,
+                self.inventory_clipboard_available,
+            )
+            .show(ui),
             Tab::Area => area::Editor::new(self.save).show(ui),
         }
     }
+}
+
+pub(super) fn reset_inventory_selection(ctx: &egui::Context) {
+    inventory::reset_selection(ctx);
 }
