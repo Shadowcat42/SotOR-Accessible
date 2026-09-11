@@ -91,6 +91,38 @@ pub fn keyboard_list(
             input.consume_key(Modifiers::NONE, Key::ArrowLeft);
             input.consume_key(Modifiers::NONE, Key::ArrowRight);
         });
+
+        let first_letter = ui.input_mut(|input| {
+            let mut first_letter = None;
+            input.events.retain(|event| {
+                let egui::Event::Text(text) = event else {
+                    return true;
+                };
+                let mut characters = text.chars();
+                let Some(character) = characters.next() else {
+                    return true;
+                };
+                if characters.next().is_some() || !character.is_alphanumeric() {
+                    return true;
+                }
+                first_letter = Some(character);
+                false
+            });
+            first_letter
+        });
+        if let Some(first_letter) = first_letter {
+            let sought: String = first_letter.to_lowercase().collect();
+            let start = (*selected + 1) % options.len();
+            if let Some(offset) = (0..options.len()).find(|offset| {
+                options[(start + offset) % options.len()]
+                    .trim_start()
+                    .chars()
+                    .next()
+                    .is_some_and(|character| character.to_lowercase().collect::<String>() == sought)
+            }) {
+                *selected = (start + offset) % options.len();
+            }
+        }
     }
 
     let selected_name = options[*selected].clone();
@@ -296,7 +328,17 @@ impl UiExt for Ui {
         _logarithmic: bool,
         label: &str,
     ) -> Response {
-        let response = self.add(DragValue::new(value).clamp_range(range));
+        let response = self.add(DragValue::new(value).speed(1.).clamp_range(range));
+        self.memory_mut(|memory| {
+            memory.set_focus_lock_filter(
+                response.id,
+                EventFilter {
+                    horizontal_arrows: true,
+                    vertical_arrows: true,
+                    ..Default::default()
+                },
+            );
+        });
         response.widget_info(|| WidgetInfo {
             label: Some(label.to_owned()),
             ..WidgetInfo::drag_value(value.to_f64())
@@ -702,6 +744,41 @@ mod tests {
     }
 
     #[test]
+    fn keyboard_list_first_letter_navigation_cycles_matches() {
+        let ctx = egui::Context::default();
+        let control_id = Id::new("test_list").with("keyboard_list_control");
+        ctx.memory_mut(|memory| memory.request_focus(control_id));
+        let mut selected = 0;
+        let options = [
+            "Alpha".to_owned(),
+            "Beta".to_owned(),
+            "Bravo".to_owned(),
+            "Charlie".to_owned(),
+        ];
+
+        for _ in 0..2 {
+            let _ = ctx.run(Default::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    keyboard_list(ui, "test_list", "Test list", &options, &mut selected);
+                });
+            });
+        }
+
+        for expected in [1, 2, 1] {
+            let mut input = egui::RawInput::default();
+            input.events.push(egui::Event::Text("b".to_owned()));
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    keyboard_list(ui, "test_list", "Test list", &options, &mut selected);
+                    let _ = ui.button("Following control");
+                });
+            });
+            assert_eq!(selected, expected);
+            assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+        }
+    }
+
+    #[test]
     fn keyboard_tab_list_wraps_and_keeps_focus() {
         let ctx = egui::Context::default();
         let base_id = Id::new("test_tabs").with("keyboard_tab_list");
@@ -824,5 +901,62 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    #[test]
+    fn spin_control_arrows_change_value_and_keep_focus() {
+        let ctx = egui::Context::default();
+        let mut value = 42i32;
+        let mut control_id = None;
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                control_id = Some(ui.s_spin(&mut value, 0..=100, false, "Experience").id);
+            });
+        });
+        let control_id = control_id.unwrap();
+        ctx.memory_mut(|memory| memory.request_focus(control_id));
+
+        // Let egui install the directional focus lock before sending an
+        // arrow key, matching a focused control in the running application.
+        let _ = ctx.run(Default::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.s_spin(&mut value, 0..=100, false, "Experience");
+                let _ = ui.button("Following control");
+            });
+        });
+
+        let mut input = egui::RawInput::default();
+        input.events.push(key_event(Key::ArrowUp));
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.s_spin(&mut value, 0..=100, false, "Experience");
+                let _ = ui.button("Following control");
+            });
+        });
+        assert_eq!(value, 43);
+        assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+
+        let mut input = egui::RawInput::default();
+        input.events.push(key_event(Key::ArrowDown));
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.s_spin(&mut value, 0..=100, false, "Experience");
+            });
+        });
+        assert_eq!(value, 42);
+        assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+
+        for key in [Key::ArrowLeft, Key::ArrowRight] {
+            let mut input = egui::RawInput::default();
+            input.events.push(key_event(key));
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.s_spin(&mut value, 0..=100, false, "Experience");
+                    let _ = ui.button("Following control");
+                });
+            });
+            assert_eq!(value, 42);
+            assert_eq!(ctx.memory(|memory| memory.focus()), Some(control_id));
+        }
     }
 }

@@ -19,13 +19,14 @@ jobs:
     runs-on: windows-latest
     env:
       CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
       ASSET_RELEASE_TAG: build-assets-v1
       ASSET_NAME: sotor-assets.zip
       ASSET_SHA256: 3a1c42cfe994977246bd340471e89304af06efb2ef9d45675e8e35dfc7023e37
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install pinned Rust toolchain
         shell: pwsh
@@ -34,6 +35,20 @@ jobs:
           rustup default 1.74.0
           rustc --version
           cargo --version
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-rust-1.74-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-1.74-
+
+      - name: Check formatting
+        run: cargo fmt --all --check
 
       - name: Download private build assets
         shell: pwsh
@@ -55,9 +70,6 @@ jobs:
           }
 
           Add-Content -Path $env:GITHUB_ENV -Value "SOTOR_ASSETS_ZIP=$assetPath"
-
-      - name: Check formatting
-        run: cargo fmt --all --check
 
       - name: Run tests
         run: cargo test --workspace --locked
@@ -103,7 +115,7 @@ jobs:
           "checksum=$checksumPath" | Add-Content -Path $env:GITHUB_OUTPUT
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SotOR-Accessible-${{ steps.package.outputs.version }}-Windows
           path: |
@@ -119,9 +131,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create $env:GITHUB_REF_NAME `
-            "${{ steps.package.outputs.archive }}" `
-            "${{ steps.package.outputs.checksum }}" `
-            --verify-tag `
-            --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
-            --notes-file RELEASE-NOTES.md
+          if (gh release view $env:GITHUB_REF_NAME *> $null) {
+            gh release upload $env:GITHUB_REF_NAME `
+              "${{ steps.package.outputs.archive }}" `
+              "${{ steps.package.outputs.checksum }}" `
+              --clobber
+            gh release edit $env:GITHUB_REF_NAME `
+              --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
+              --notes-file RELEASE-NOTES.md
+          } else {
+            gh release create $env:GITHUB_REF_NAME `
+              "${{ steps.package.outputs.archive }}" `
+              "${{ steps.package.outputs.checksum }}" `
+              --verify-tag `
+              --title "SotOR Accessible Edition ${{ steps.package.outputs.version }}" `
+              --notes-file RELEASE-NOTES.md
+          }

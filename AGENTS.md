@@ -4,9 +4,13 @@
 
 - This repository begins from the exported SotOR Accessible Edition
   `1.1.8-a5` source.
+- The original upstream SotOR reference is
+  `https://github.com/StarfishXeno/sotor` at revision
+  `e8dd39e18ae872bf24dadb28526224db7a6921b7`. Use it to confirm original
+  behavior, but do not edit or copy over accessibility work wholesale.
 - Commit `c60d8bf` is the byte-for-byte imported A5 baseline.
-- The maintained edition is named **SotOR Accessible Edition 1.0**. Cargo uses
-  the SemVer-compatible package version `1.0.0`.
+- The maintained edition is named **SotOR Accessible Edition 1.1**. Cargo uses
+  the SemVer-compatible package version `1.1.0`.
 - Preserve support for both KotOR I and KotOR II unless a task explicitly
   changes that scope.
 
@@ -86,11 +90,19 @@ For Windows releases, also verify:
 ## Git workflow
 
 - Keep `main` buildable and use small, focused commits.
+- Prefer creating a complete batch of local commits and pushing them together,
+  so GitHub Actions validates only the final commit in the push. If commits must
+  be pushed one at a time, include `[skip actions]` in every intermediate commit
+  message and omit it from the final commit so the final state is validated.
+- Documentation or workflow-maintenance commits that do not change the program
+  may use `[skip actions]`; validate the workflow syntax locally and let the next
+  source change exercise the hosted build.
+
 - Separate mechanical/versioning changes from behavior changes.
 - Do not rewrite the imported A5 baseline commit.
 - Treat successful GitHub Actions runs as the automated build record. Every
   push to `main` produces a temporary Windows artifact; a matching version tag
-  (for example, Cargo `1.0.0` with Git tag `v1.0.0`) publishes a release.
+  (for example, Cargo `1.1.0` with Git tag `v1.1.0`) publishes a release.
 - Keep the repository private unless the owner explicitly decides otherwise;
   its private build-assets release contains data derived from installed games.
 - Before committing, inspect `git diff`, run `git diff --check`, and perform the

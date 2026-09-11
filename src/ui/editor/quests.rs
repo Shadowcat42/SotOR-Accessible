@@ -1,16 +1,16 @@
 use crate::{
     save::{JournalEntry, Save},
     ui::{
-        styles::{set_drag_value_styles, set_striped_styles, GREY, WHITE},
-        widgets::{accessible_name, color_text, keyboard_list, Icon, IconButton, UiExt},
+        styles::set_spin_styles,
+        widgets::{accessible_name, keyboard_list, Icon, IconButton, UiExt},
         UiRef,
     },
-    util::{get_data_name, ColumnCounter, ContextExt as _},
+    util::{get_data_name, ContextExt as _},
 };
-use core::{GameDataMapped, Quest, QuestStage};
-use egui::{DragValue, Grid, Id, RichText, ScrollArea, WidgetInfo};
+use core::{GameDataMapped, Quest};
+use egui::{Button, Id};
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     sync::{Arc, Mutex},
 };
 
@@ -21,7 +21,6 @@ pub struct EditorQuestsState {
 }
 pub struct Editor<'a> {
     journal: &'a mut Vec<JournalEntry>,
-    width: f32,
     data: &'a GameDataMapped,
 }
 
@@ -30,144 +29,110 @@ impl<'a> Editor<'a> {
         Self {
             journal: &mut save.party_table.journal,
             data,
-            width: 0.,
         }
     }
 
     pub fn show(&mut self, ui: UiRef) {
-        self.width = ui.available_width();
-
-        ScrollArea::vertical()
-            .scroll_bar_visibility(egui::containers::scroll_area::ScrollBarVisibility::AlwaysHidden)
-            .drag_to_scroll(false)
-            .id_source("eq_scroll")
-            .stick_to_bottom(true)
-            .max_height(ui.available_height() - 30.)
-            .show(ui, |ui| {
-                ui.set_width(self.width);
-                ui.set_height(ui.available_height());
-                set_striped_styles(ui);
-
-                Grid::new("eq_grid")
-                    .spacing([0., 5.])
-                    .striped(true)
-                    .num_columns(3)
-                    .max_col_width(230.)
-                    .show(ui, |ui| {
-                        self.table(ui);
-                    });
-            });
+        if self.journal.is_empty() {
+            ui.label("No current or completed quests are present in this save.");
+        } else {
+            self.current_quest(ui);
+        }
         ui.separator();
         self.addition(ui);
     }
 
-    fn table(&mut self, ui: UiRef) {
-        let columns = ((self.width / 715.) as usize).clamp(1, self.journal.len().max(1));
-        let counter = &mut ColumnCounter::new(columns);
-
-        for _ in 0..columns {
-            ui.s_empty();
-            ui.label(RichText::new("Name").underline());
-            ui.add_space(10.);
-            ui.label(RichText::new("Stage").underline());
-            ui.add_space(10.);
-            counter.next(ui);
-        }
+    fn current_quest(&mut self, ui: UiRef) {
         let mut quests = Vec::with_capacity(self.journal.len());
-        for (idx, entry) in self.journal.iter_mut().enumerate() {
+        for (idx, entry) in self.journal.iter().enumerate() {
             let quest = self.data.quests.get(&entry.id.to_lowercase());
-            let stages = quest.map(|q| &q.stages);
-            let stage = stages.and_then(|s| s.get(&entry.stage));
+            let stage = quest.and_then(|quest| quest.stages.get(&entry.stage));
             let name = get_data_name(&self.data.quests, &entry.id);
             let completed = stage.map_or(false, |s| s.end);
 
-            quests.push((completed, name, entry, stages, idx));
+            quests.push((idx, completed, name.into_owned()));
         }
-        // sort them by completeness -> name
         quests.sort_unstable_by(|a, b| {
-            let completed_eq = a.0.cmp(&b.0);
+            let completed_eq = a.1.cmp(&b.1);
             if completed_eq.is_ne() {
                 return completed_eq;
             }
-            a.1.cmp(&b.1)
+            a.2.cmp(&b.2)
         });
 
-        let mut removed = None;
-        for (completed, name, entry, stages, idx) in quests {
-            let remove = || removed = Some(idx);
-            Self::quest(ui, completed, &name, entry, stages, idx, remove);
-            counter.next(ui);
-        }
-
-        if let Some(idx) = removed {
-            self.journal.remove(idx);
-        }
-    }
-
-    fn quest(
-        ui: UiRef,
-        completed: bool,
-        name: &str,
-        entry: &mut JournalEntry,
-        stages: Option<&BTreeMap<i32, QuestStage>>,
-        source_idx: usize,
-        remove: impl FnOnce(),
-    ) {
-        if ui
-            .s_icon_button(Icon::Remove, &format!("Remove quest {name}"))
-            .clicked()
-        {
-            remove();
-        }
-
-        let name_color = if completed { GREY } else { WHITE };
-        let quest_accessible_name = if completed {
-            format!("Completed quest: {name}")
-        } else {
-            format!("Quest: {name}")
-        };
-        let label_r = ui.label(color_text(&quest_accessible_name, name_color));
-        ui.add_space(10.);
-        // it's not already in the name
-        if stages.is_some() {
-            label_r.on_hover_text(color_text(&entry.id, WHITE));
-        }
-
-        if let Some(stages) = stages {
-            let mut stage_ids: Vec<_> = stages.keys().copied().collect();
-            if !stages.contains_key(&entry.stage) {
-                stage_ids.insert(0, entry.stage);
-            }
-            let options: Vec<_> = stage_ids
-                .iter()
-                .map(|id| {
-                    stages.get(id).map_or_else(
-                        || format!("{id} UNKNOWN"),
-                        |stage| accessible_name(&stage.get_name(60), Some(&stage.description)),
-                    )
-                })
-                .collect();
-            let mut cursor = stage_ids
-                .iter()
-                .position(|id| *id == entry.stage)
-                .unwrap_or(0);
+        let options: Vec<_> = quests
+            .iter()
+            .map(|(_, completed, name)| {
+                if *completed {
+                    format!("Completed quest: {name}")
+                } else {
+                    format!("Current quest: {name}")
+                }
+            })
+            .collect();
+        let cursor_key = "eq_current_quest_cursor";
+        let mut cursor = ui.ctx().get_data(cursor_key).unwrap_or(0);
+        cursor = cursor.min(quests.len() - 1);
+        let mut remove = None;
+        ui.columns(3, |columns| {
             keyboard_list(
-                ui,
-                Id::new("eq_current_stage").with(source_idx),
-                &format!("{name} stage"),
+                &mut columns[0],
+                "eq_current_quest",
+                "Current or completed quest",
                 &options,
                 &mut cursor,
             );
-            entry.stage = stage_ids[cursor];
-        } else {
-            set_drag_value_styles(ui);
-            let response = ui.add(DragValue::new(&mut entry.stage));
-            response.widget_info(|| WidgetInfo {
-                label: Some(format!("{name} stage")),
-                ..WidgetInfo::drag_value(entry.stage.into())
-            });
+            columns[0].ctx().set_data(cursor_key, cursor);
+
+            let (source_idx, _, name) = &quests[cursor];
+            let source_idx = *source_idx;
+            let entry = &mut self.journal[source_idx];
+            if let Some(quest) = self.data.quests.get(&entry.id.to_lowercase()) {
+                let stages = &quest.stages;
+                let mut stage_ids: Vec<_> = stages.keys().copied().collect();
+                if !stages.contains_key(&entry.stage) {
+                    stage_ids.insert(0, entry.stage);
+                }
+                let options: Vec<_> = stage_ids
+                    .iter()
+                    .map(|id| {
+                        stages.get(id).map_or_else(
+                            || format!("{id} UNKNOWN"),
+                            |stage| accessible_name(&stage.get_name(60), Some(&stage.description)),
+                        )
+                    })
+                    .collect();
+                let mut stage_cursor = stage_ids
+                    .iter()
+                    .position(|id| *id == entry.stage)
+                    .unwrap_or(0);
+                keyboard_list(
+                    &mut columns[1],
+                    Id::new("eq_current_stage").with(source_idx),
+                    &format!("{name} stage"),
+                    &options,
+                    &mut stage_cursor,
+                );
+                entry.stage = stage_ids[stage_cursor];
+            } else {
+                set_spin_styles(&mut columns[1]);
+                columns[1].s_spin(
+                    &mut entry.stage,
+                    i32::MIN..=i32::MAX,
+                    false,
+                    &format!("{name} stage"),
+                );
+            }
+            if columns[2]
+                .add(Button::new(format!("Remove quest {name}")))
+                .clicked()
+            {
+                remove = Some(source_idx);
+            }
+        });
+        if let Some(source_idx) = remove {
+            self.journal.remove(source_idx);
         }
-        ui.add_space(10.);
     }
 
     fn get_present_ids(&self) -> HashSet<&String> {
@@ -216,53 +181,58 @@ impl<'a> Editor<'a> {
             .position(|quest| quest.id == state.id)
             .unwrap_or(0);
         let previous_quest = quest_cursor;
-        keyboard_list(
-            ui,
-            "eq_new_id",
-            "Quest to add",
-            &quest_options,
-            &mut quest_cursor,
-        );
-        if !available.is_empty() && quest_cursor != previous_quest {
-            state.id = available[quest_cursor].id.clone();
-            state.stage = available[quest_cursor].get_first_stage_id();
-        }
+        let mut add = false;
+        ui.columns(3, |columns| {
+            keyboard_list(
+                &mut columns[0],
+                "eq_new_id",
+                "Quest to add",
+                &quest_options,
+                &mut quest_cursor,
+            );
+            if !available.is_empty() && quest_cursor != previous_quest {
+                state.id = available[quest_cursor].id.clone();
+                state.stage = available[quest_cursor].get_first_stage_id();
+            }
 
-        let current_quest = available.get(quest_cursor).copied();
-        let stage_ids: Vec<_> = current_quest
-            .map(|quest| quest.stages.keys().copied().collect())
-            .unwrap_or_default();
-        let stage_options: Vec<_> = current_quest
-            .map(|quest| {
-                stage_ids
-                    .iter()
-                    .map(|id| {
-                        let stage = &quest.stages[id];
-                        accessible_name(&stage.get_name(40), Some(&stage.description))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let mut stage_cursor = stage_ids
-            .iter()
-            .position(|id| *id == state.stage)
-            .unwrap_or(0);
-        keyboard_list(
-            ui,
-            "eq_new_stage",
-            "New quest stage",
-            &stage_options,
-            &mut stage_cursor,
-        );
-        if let Some(stage) = stage_ids.get(stage_cursor) {
-            state.stage = *stage;
-        }
-        let btn = ui.add_enabled(
-            !available.is_empty(),
-            IconButton::new(Icon::Plus).hint("Add quest"),
-        );
+            let current_quest = available.get(quest_cursor).copied();
+            let stage_ids: Vec<_> = current_quest
+                .map(|quest| quest.stages.keys().copied().collect())
+                .unwrap_or_default();
+            let stage_options: Vec<_> = current_quest
+                .map(|quest| {
+                    stage_ids
+                        .iter()
+                        .map(|id| {
+                            let stage = &quest.stages[id];
+                            accessible_name(&stage.get_name(40), Some(&stage.description))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut stage_cursor = stage_ids
+                .iter()
+                .position(|id| *id == state.stage)
+                .unwrap_or(0);
+            keyboard_list(
+                &mut columns[1],
+                "eq_new_stage",
+                "New quest stage",
+                &stage_options,
+                &mut stage_cursor,
+            );
+            if let Some(stage) = stage_ids.get(stage_cursor) {
+                state.stage = *stage;
+            }
+            add = columns[2]
+                .add_enabled(
+                    !available.is_empty(),
+                    IconButton::new(Icon::Plus).hint("Add quest"),
+                )
+                .clicked();
+        });
 
-        if btn.clicked() {
+        if add {
             let last = self.journal.last();
             self.journal.push(JournalEntry {
                 id: state.id.trim().to_owned(),

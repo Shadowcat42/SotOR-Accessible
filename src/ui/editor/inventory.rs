@@ -10,6 +10,7 @@ use crate::{
 use core::{Data as _, DataDescr as _, GameDataMapped};
 use egui::{Button, Grid, Id, Label};
 
+
 pub struct Editor<'a> {
     items: &'a mut Vec<Item>,
     data: &'a GameDataMapped,
@@ -113,6 +114,7 @@ impl<'a> Editor<'a> {
                     ui.end_row();
                 }
             });
+
     }
 
     fn addition(&mut self, ui: UiRef) {

@@ -9,7 +9,7 @@ use ahash::HashMap;
 use core::{util::fs::read_dir_filemap, GameData, GameDataMapped};
 #[cfg(not(target_arch = "wasm32"))]
 use eframe::APP_KEY;
-use egui::{Context, Ui};
+use egui::{output::OutputEvent, Context, Ui, WidgetInfo, WidgetType};
 use egui_toast::Toasts;
 use log::error;
 #[cfg(not(target_arch = "wasm32"))]
@@ -45,6 +45,7 @@ struct PersistentState {
 #[cfg(not(target_arch = "wasm32"))]
 pub struct SotorApp {
     save: Option<Save>,
+    persisted_save: Option<Save>,
     channel: (Sender<Message>, Receiver<Message>),
     default_game_data: [GameDataMapped; Game::COUNT],
     toasts: Toasts,
@@ -60,6 +61,7 @@ pub struct SotorApp {
 #[cfg(target_arch = "wasm32")]
 pub struct SotorApp {
     save: Option<Save>,
+    persisted_save: Option<Save>,
     channel: (Sender<Message>, Receiver<Message>),
     default_game_data: [GameDataMapped; Game::COUNT],
     toasts: Toasts,
@@ -79,6 +81,7 @@ impl SotorApp {
             let prs = cc.storage.and_then(|s| eframe::get_value(s, APP_KEY));
             let mut app = Self {
                 save: None,
+                persisted_save: None,
                 save_path: None,
                 channel: (sender, receiver),
                 default_game_data,
@@ -100,6 +103,7 @@ impl SotorApp {
         {
             Self {
                 save: None,
+                persisted_save: None,
                 channel: (sender, receiver),
                 default_game_data,
                 toasts,
@@ -110,10 +114,18 @@ impl SotorApp {
 
     fn close_save(&mut self) {
         self.save = None;
+        self.persisted_save = None;
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.save_path = None;
         }
+    }
+
+    fn has_unsaved_changes(&self) -> bool {
+        matches!(
+            (&self.save, &self.persisted_save),
+            (Some(save), Some(persisted)) if save != persisted
+        )
     }
 
     fn add_toast(&mut self, text: impl Into<String>, content: Option<String>, success: bool) {
@@ -164,6 +176,7 @@ impl SotorApp {
     fn load_save(&mut self, files: &HashMap<String, Vec<u8>>, ctx: &Context) {
         match Save::read_from_files(files, ctx) {
             Ok(save) => {
+                self.persisted_save = Some(save.clone());
                 self.save = Some(save);
             }
             Err(err) => {
@@ -215,7 +228,10 @@ impl SotorApp {
             game_data,
         );
         match res {
-            Ok(_) => self.add_toast("Saved successfully", None, true),
+            Ok(_) => {
+                self.persisted_save = self.save.clone();
+                self.add_toast("Saved successfully", None, true);
+            }
             Err(err) => {
                 error!("{err}");
                 self.add_toast("Couldn't save: ", Some(err), false);
@@ -226,6 +242,7 @@ impl SotorApp {
     fn load_save(&mut self, path: String, ctx: &Context, silent: bool) -> bool {
         let success = match Save::read_from_directory(&path, ctx) {
             Ok(save) => {
+                self.persisted_save = Some(save.clone());
                 self.save = Some(save);
                 self.save_path = Some(path);
                 true
@@ -240,6 +257,59 @@ impl SotorApp {
         };
         self.set_meta_id(ctx);
         success
+    }
+
+    fn save_label(&self, path: &str) -> String {
+        for game in Game::LIST {
+            for group in &self.save_list[game.idx()] {
+                for save in &group.dirs {
+                    if save.path == path {
+                        let location = if group.cloud { "cloud" } else { "local" };
+                        return format!("KotOR {game} {} {location}", save.name);
+                    }
+                }
+            }
+        }
+
+        PathBuf::from(path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(path)
+            .to_owned()
+    }
+
+    fn request_load_save(&mut self, path: String, ctx: &Context) {
+        let loading_different_save = self
+            .save_path
+            .as_deref()
+            .is_some_and(|current| current != path.as_str());
+        if loading_different_save && self.has_unsaved_changes() {
+            let confirmed = rfd::MessageDialog::new()
+                .set_title("Unsaved changes")
+                .set_description(
+                    "Loading another save will discard your unsaved changes. Continue?",
+                )
+                .set_level(rfd::MessageLevel::Warning)
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .show();
+            if confirmed != rfd::MessageDialogResult::Yes {
+                return;
+            }
+        }
+
+        let label = self.save_label(&path);
+        if self.load_save(path, ctx, false) {
+            let announcement = format!("Loaded save: {label}");
+            self.add_toast(announcement.clone(), None, true);
+            ctx.output_mut(|output| {
+                output
+                    .events
+                    .push(OutputEvent::ValueChanged(WidgetInfo::labeled(
+                        WidgetType::Other,
+                        announcement,
+                    )));
+            });
+        }
     }
 
     fn _reload_save(&mut self, ctx: &Context) -> bool {
@@ -440,7 +510,7 @@ impl eframe::App for SotorApp {
                 Message::CloseSave => self.close_save(),
                 Message::ReloadSave => self.reload_save(ctx),
                 Message::LoadSaveFromDir(path) => {
-                    self.load_save(path.to_string(), ctx, false);
+                    self.request_load_save(path, ctx);
                 }
                 Message::ToggleSettingsOpen => self.toggle_settings_open(),
                 Message::SetSteamPath(path) => self.set_steam_path(path, ctx),

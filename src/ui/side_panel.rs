@@ -7,7 +7,7 @@ use crate::{
     util::{open_file_manager, ContextExt, Game, Message},
 };
 use core::GameDataMapped;
-use egui::{Frame, Layout, Margin};
+use egui::{Frame, Key, Layout, Margin, Modifiers};
 
 pub struct SidePanel<'a> {
     current_save: &'a Option<String>,
@@ -98,7 +98,16 @@ impl<'a> SidePanel<'a> {
             }
         }
 
-        let options: Vec<_> = saves.iter().map(|(name, _)| name.clone()).collect();
+        let options: Vec<_> = saves
+            .iter()
+            .map(|(name, path)| {
+                if self.current_save.as_deref() == Some(*path) {
+                    format!("{name} (loaded)")
+                } else {
+                    name.clone()
+                }
+            })
+            .collect();
         let mut selected = ui
             .ctx()
             .get_data_raw("sp_save_cursor")
@@ -108,18 +117,40 @@ impl<'a> SidePanel<'a> {
                     .and_then(|path| saves.iter().position(|(_, candidate)| candidate == path))
             })
             .unwrap_or(0);
-        keyboard_list(ui, "sp_save_list", "Saves", &options, &mut selected);
+        let list_response = keyboard_list(ui, "sp_save_list", "Saves", &options, &mut selected);
         ui.ctx().set_data_raw("sp_save_cursor", selected);
 
         let Some((_, path)) = saves.get(selected) else {
             return;
         };
-        if ui.s_button_basic("Load selected save").clicked() {
+        let enter_pressed = list_response.has_focus()
+            && ui.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter));
+        if enter_pressed {
             ui.ctx()
                 .send_message(Message::LoadSaveFromDir((*path).to_owned()));
         }
         if ui.s_button_basic("Open selected save folder").clicked() {
             open_file_manager(path);
+        }
+
+        let no_save_loaded = self.current_save.is_none();
+        if ui
+            .s_button("Save (Ctrl+S)", false, no_save_loaded)
+            .clicked()
+        {
+            ui.ctx().send_message(Message::Save);
+        }
+        if ui
+            .s_button("Reload save (Ctrl+R)", false, no_save_loaded)
+            .clicked()
+        {
+            ui.ctx().send_message(Message::ReloadSave);
+        }
+        if ui
+            .s_button("Close save (Ctrl+W)", false, no_save_loaded)
+            .clicked()
+        {
+            ui.ctx().send_message(Message::CloseSave);
         }
     }
 
@@ -146,7 +177,7 @@ mod tests {
         let ctx = egui::Context::default();
         ctx.options_mut(|options| options.screen_reader = true);
         ctx.enable_accesskit();
-        let current_save = None;
+        let current_save = Some("C:\\KOTOR\\saves\\000001 - Game1".to_owned());
         let game_data: [Option<GameDataMapped>; Game::COUNT] = [None, None];
         let save_list = [
             vec![SaveDirectories {
@@ -175,7 +206,10 @@ mod tests {
             .collect();
         assert_eq!(combos.len(), 1);
         assert_eq!(combos[0].1.name(), Some("Saves"));
-        assert_eq!(combos[0].1.value(), Some("KotOR 1 Game1 local 1 of 1"));
+        assert_eq!(
+            combos[0].1.value(),
+            Some("KotOR 1 Game1 local (loaded) 1 of 1")
+        );
         assert_eq!(
             update
                 .nodes
@@ -186,5 +220,51 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    #[test]
+    fn enter_on_save_list_requests_selected_save_load() {
+        let ctx = egui::Context::default();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        ctx.set_channel(sender);
+        ctx.memory_mut(|memory| {
+            memory.request_focus(egui::Id::new("sp_save_list").with("keyboard_list_control"));
+        });
+        let current_save = None;
+        let game_data: [Option<GameDataMapped>; Game::COUNT] = [None, None];
+        let save_list = [
+            vec![SaveDirectories {
+                cloud: false,
+                dirs: vec![Directory {
+                    path: "C:\\KOTOR\\saves\\000001 - Game1".to_owned(),
+                    name: "Game1".to_owned(),
+                    date: 1,
+                }],
+            }],
+            vec![],
+        ];
+        let mut input = egui::RawInput::default();
+        input.events.push(egui::Event::Key {
+            key: Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        });
+
+        let _ = ctx.run(input, |ctx| {
+            egui::SidePanel::left("test_save_panel")
+                .resizable(false)
+                .show(ctx, |ui| {
+                    SidePanel::new(&current_save, &game_data, &save_list).lists(ui);
+                });
+        });
+
+        match receiver.try_recv().unwrap() {
+            Message::LoadSaveFromDir(path) => {
+                assert_eq!(path, "C:\\KOTOR\\saves\\000001 - Game1")
+            }
+            _ => panic!("Enter should request loading the selected save"),
+        }
     }
 }
