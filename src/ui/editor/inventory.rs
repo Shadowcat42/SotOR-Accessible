@@ -184,14 +184,9 @@ impl<'a> Editor<'a> {
         {
             let new_source_idx = self.items.len();
             self.items.push(available[cursor].into());
-            let current_filter: String = ui
-                .ctx()
-                .get_data(CURRENT_FILTER_ID)
-                .unwrap_or_default();
+            let current_filter: String = ui.ctx().get_data(CURRENT_FILTER_ID).unwrap_or_default();
             let sorted = sorted_inventory(self.items, &current_filter);
-            if let Some(current_cursor) = sorted
-                .iter()
-                .position(|(idx, _)| *idx == new_source_idx)
+            if let Some(current_cursor) = sorted.iter().position(|(idx, _)| *idx == new_source_idx)
             {
                 ui.ctx().set_data(CURRENT_CURSOR_ID, current_cursor);
             }

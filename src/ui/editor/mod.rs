@@ -173,12 +173,10 @@ impl<'a> Editor<'a> {
             Tab::Globals => globals::Editor::new(self.save).show(ui),
             Tab::Characters => characters::Editor::new(self.save, self.data).show(ui),
             Tab::Quests => quests::Editor::new(self.save, self.data).show(ui),
-            Tab::Inventory => inventory::Editor::new(
-                self.save,
-                self.data,
-                self.inventory_clipboard_available,
-            )
-            .show(ui),
+            Tab::Inventory => {
+                inventory::Editor::new(self.save, self.data, self.inventory_clipboard_available)
+                    .show(ui)
+            }
             Tab::Area => area::Editor::new(self.save).show(ui),
         }
     }

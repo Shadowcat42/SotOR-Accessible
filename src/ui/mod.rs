@@ -851,8 +851,7 @@ mod tests {
 
     #[test]
     fn empty_inventory_can_be_copied_and_pasted() {
-        let clipboard =
-            InventoryClipboard::copy(&[], Game::Two, "KotOR 2 empty save".to_owned());
+        let clipboard = InventoryClipboard::copy(&[], Game::Two, "KotOR 2 empty save".to_owned());
         let mut destination = vec![item("destination", 1, "destination raw data")];
 
         assert_eq!(clipboard.paste_into(Game::Two, &mut destination), Ok(0));
