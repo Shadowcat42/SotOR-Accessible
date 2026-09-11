@@ -66,7 +66,7 @@ impl<'a> Editor<'a> {
             ui.ctx().set_data(CURRENT_CURSOR_ID, 0usize);
         }
 
-        let sorted = sorted_inventory(self.items, &filter);
+        let sorted = sorted_inventory(self.items, self.data, &filter);
         let options: Vec<_> = sorted.iter().map(|(_, name)| name.clone()).collect();
         let key = Id::new(CURRENT_CURSOR_ID);
         let mut cursor = ui.ctx().get_data(key).unwrap_or(0);
@@ -82,7 +82,7 @@ impl<'a> Editor<'a> {
                 .selected
                 .expect("enabled only when an item is selected");
             self.items.remove(selected);
-            let remaining = sorted_inventory(self.items, &filter);
+            let remaining = sorted_inventory(self.items, self.data, &filter);
             cursor = cursor.min(remaining.len().saturating_sub(1));
             ui.ctx().set_data(key, cursor);
             self.selected = remaining.get(cursor).map(|(idx, _)| *idx);
@@ -183,7 +183,7 @@ impl<'a> Editor<'a> {
             let new_source_idx = self.items.len();
             self.items.push(available[cursor].into());
             let current_filter: String = ui.ctx().get_data(CURRENT_FILTER_ID).unwrap_or_default();
-            let sorted = sorted_inventory(self.items, &current_filter);
+            let sorted = sorted_inventory(self.items, self.data, &current_filter);
             if let Some(current_cursor) = sorted.iter().position(|(idx, _)| *idx == new_source_idx)
             {
                 ui.ctx().set_data(CURRENT_CURSOR_ID, current_cursor);
@@ -196,15 +196,40 @@ pub(super) fn reset_selection(ctx: &egui::Context) {
     ctx.set_data(CURRENT_CURSOR_ID, 0usize);
 }
 
-fn sorted_inventory(items: &[Item], filter: &str) -> Vec<(usize, String)> {
+fn sorted_inventory(
+    items: &[Item],
+    data: &GameDataMapped,
+    filter: &str,
+) -> Vec<(usize, String)> {
     let mut sorted: Vec<_> = items
         .iter()
         .enumerate()
         .filter(|(_, item)| matches_filter(item.get_name(), &item.tag, filter))
-        .map(|(idx, item)| (idx, item.get_name().to_owned()))
+        .map(|(idx, item)| {
+            let template_description = data
+                .items
+                .get(&item.tag)
+                .and_then(|item| item.get_description());
+            (
+                idx,
+                inventory_option(
+                    item.get_name(),
+                    item.get_description(),
+                    template_description,
+                ),
+            )
+        })
         .collect();
     sorted.sort_unstable_by(|a, b| a.1.cmp(&b.1));
     sorted
+}
+
+fn inventory_option(
+    name: &str,
+    description: Option<&str>,
+    template_description: Option<&str>,
+) -> String {
+    accessible_name(name, description.or(template_description))
 }
 
 fn matches_filter(name: &str, tag: &str, filter: &str) -> bool {
@@ -215,4 +240,21 @@ fn matches_filter(name: &str, tag: &str, filter: &str) -> bool {
 
     let filter = filter.to_lowercase();
     name.to_lowercase().contains(&filter) || tag.to_lowercase().contains(&filter)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inventory_option;
+
+    #[test]
+    fn current_inventory_option_includes_saved_or_template_description() {
+        assert_eq!(
+            inventory_option("Custom item", Some("Saved description"), Some("Template")),
+            "Custom item. Description: Saved description"
+        );
+        assert_eq!(
+            inventory_option("Stock item", None, Some("Template description")),
+            "Stock item. Description: Template description"
+        );
+    }
 }
