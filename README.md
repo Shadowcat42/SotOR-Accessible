@@ -39,8 +39,8 @@ I would like to add support for the console versions, but I don't own any of the
 # Building
 
 Official Windows packages are built by the `Windows build` GitHub Actions
-workflow. Pushing a version tag such as `v1.2.0` creates a GitHub release with
-a standalone, versioned executable such as `SOTOR-1.2.exe`. The workflow can
+workflow. Pushing a version tag such as `v1.3.0` creates a GitHub release with
+a standalone, versioned executable such as `SOTOR-1.3.exe`. The workflow can
 also be started manually for validation without publishing a release. Ordinary
 branch pushes do not run it. GitHub provides the source-code archives
 automatically. The workflow uses the private, checksum-verified
