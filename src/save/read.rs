@@ -1,8 +1,8 @@
 use crate::{
     save::{
-        AvailablePartyMember, Character, Class, Door, Game, Gender, Global, GlobalValue, Item,
-        JournalEntry, Nfo, PartyMember, PartyTable, Save, SaveInternals, EQUIPMENT_SLOT_IDS,
-        GLOBALS_TYPES, NPC_RESOURCE_PREFIX,
+        read_character_invulnerable, AvailablePartyMember, Character, Class, Door, Game, Gender,
+        Global, GlobalValue, Item, JournalEntry, Nfo, PartyMember, PartyTable, Save, SaveInternals,
+        EQUIPMENT_SLOT_IDS, GLOBALS_TYPES, NPC_RESOURCE_PREFIX,
     },
     util::{calc_hp_fp_offset, SResult},
 };
@@ -381,6 +381,7 @@ impl Reader {
             hp_max: s.get("MaxHitPoints", Field::short)?,
             fp: s.get("ForcePoints", Field::short)?,
             fp_max: s.get("MaxForcePoints", Field::short)?,
+            invulnerable: read_character_invulnerable(&s)?,
             min_1_hp: s.get("Min1HP", Field::byte)? != 0,
             good_evil: s.get("GoodEvil", Field::byte)?,
             experience: s.get("Experience", Field::dword)?,

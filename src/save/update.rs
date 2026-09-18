@@ -1,5 +1,8 @@
 use crate::{
-    save::{Character, Class, GlobalValue, Item, Save, GLOBALS_TYPES, NPC_RESOURCE_PREFIX},
+    save::{
+        write_character_invulnerable, Character, Class, GlobalValue, Item, Save, GLOBALS_TYPES,
+        NPC_RESOURCE_PREFIX,
+    },
     util::{calc_hp_fp_offset, find_pc_name},
 };
 use core::{
@@ -205,6 +208,7 @@ impl<'a> Updater<'a> {
         s.insert("ForcePoints", Field::Short(current_force));
         s.insert("CurrentForce", Field::Short(current_force));
         s.insert("MaxForcePoints", Field::Short(char.fp_max));
+        write_character_invulnerable(s, char.invulnerable);
         s.insert("Min1HP", Field::Byte(char.min_1_hp as u8));
         s.insert("GoodEvil", Field::Byte(char.good_evil));
         s.insert("Experience", Field::Dword(char.experience));

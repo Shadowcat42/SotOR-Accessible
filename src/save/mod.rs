@@ -6,7 +6,7 @@ use crate::{
 use ahash::HashMap;
 use core::{
     erf::{self, Erf},
-    gff::{self, Gff, Struct},
+    gff::{self, Field, Gff, Struct},
     Data, DataDescr, GameDataMapped, Item as DItem, ReadResourceNoArg as _, ResourceKey,
 };
 use egui::{Context, TextureHandle, TextureOptions};
@@ -117,6 +117,7 @@ pub struct Character {
     pub hp_max: i16,
     pub fp: i16,
     pub fp_max: i16,
+    pub invulnerable: bool,
     pub min_1_hp: bool,
     pub good_evil: u8,
     pub experience: u32,
@@ -131,6 +132,28 @@ pub struct Character {
     pub equipment: Box<[Option<Item>; 12]>,
 
     raw: Struct,
+}
+
+fn read_character_invulnerable(raw: &Struct) -> SResult<bool> {
+    for field_name in ["Invulnerable", "Plot"] {
+        let Some(field) = raw.fields.get(field_name) else {
+            continue;
+        };
+        return Field::byte(field)
+            .copied()
+            .map(|value| value != 0)
+            .ok_or_else(|| format!("invalid field {field_name}"));
+    }
+
+    Ok(false)
+}
+
+fn write_character_invulnerable(raw: &mut Struct, invulnerable: bool) {
+    let value = Field::Byte(invulnerable as u8);
+    raw.insert("Plot", value.clone());
+    if raw.fields.contains_key("Invulnerable") {
+        raw.insert("Invulnerable", value);
+    }
 }
 
 impl Character {
@@ -295,6 +318,36 @@ mod tests {
         } else {
             value + 1
         }
+    }
+
+    #[test]
+    fn character_invulnerability_uses_engine_field_precedence() {
+        let plot_only = Struct::new(vec![("Plot", Field::Byte(1))]);
+        assert!(read_character_invulnerable(&plot_only).unwrap());
+
+        let both = Struct::new(vec![
+            ("Plot", Field::Byte(1)),
+            ("Invulnerable", Field::Byte(0)),
+        ]);
+        assert!(!read_character_invulnerable(&both).unwrap());
+
+        assert!(!read_character_invulnerable(&Struct::new(vec![])).unwrap());
+    }
+
+    #[test]
+    fn character_invulnerability_writes_plot_and_syncs_existing_alias() {
+        let mut plot_only = Struct::new(vec![("Plot", Field::Byte(1))]);
+        write_character_invulnerable(&mut plot_only, false);
+        assert_eq!(plot_only.fields.get("Plot"), Some(&Field::Byte(0)));
+        assert!(!plot_only.fields.contains_key("Invulnerable"));
+
+        let mut both = Struct::new(vec![
+            ("Plot", Field::Byte(0)),
+            ("Invulnerable", Field::Byte(0)),
+        ]);
+        write_character_invulnerable(&mut both, true);
+        assert_eq!(both.fields.get("Plot"), Some(&Field::Byte(1)));
+        assert_eq!(both.fields.get("Invulnerable"), Some(&Field::Byte(1)));
     }
 
     #[test]
