@@ -67,6 +67,7 @@ enum Field {
     MaxHp,
     Hp,
     MinOneHp,
+    Invulnerable,
     MaxFp,
     Fp,
     Alignment,
@@ -191,6 +192,10 @@ impl<'a> Editor<'a> {
             (
                 Field::MinOneHp,
                 format!("Minimum 1 HP — {}", character.min_1_hp),
+            ),
+            (
+                Field::Invulnerable,
+                format!("Invulnerable — {}", character.invulnerable),
             ),
             (
                 Field::MaxFp,
@@ -347,6 +352,13 @@ impl<'a> Editor<'a> {
                 ui.s_checkbox(
                     &mut self.save.characters[self.selected].min_1_hp,
                     "Minimum 1 HP",
+                );
+            }
+            Field::Invulnerable => {
+                set_checkbox_styles(ui);
+                ui.s_checkbox(
+                    &mut self.save.characters[self.selected].invulnerable,
+                    "Invulnerable; character takes no damage",
                 );
             }
             Field::MaxFp => self.read_only(ui, "Maximum Force points", |c| c.fp_max.to_string()),

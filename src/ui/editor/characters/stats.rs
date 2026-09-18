@@ -72,16 +72,6 @@ impl<'a> CharStats<'a> {
             });
             ui.end_row();
 
-            ui.label(color_text("Invulnerable: ", GREEN));
-            ui.horizontal(|ui| {
-                set_checkbox_styles(ui);
-                ui.s_checkbox(
-                    &mut self.char.invulnerable,
-                    "Invulnerable; character takes no damage",
-                );
-            });
-            ui.end_row();
-
             ui.label(color_text("Max FP: ", GREEN));
             ui.add_enabled_ui(false, |ui| {
                 ui.s_spin(
